@@ -52,6 +52,47 @@
     .rule { display: flex; justify-content: space-between; gap: 16px; padding-top: 18px; border-top: 1px solid var(--rule); font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
     .rule a { color: var(--muted); text-decoration: none; }
     .rule a:hover { color: var(--accent); }
+    .live {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 22px;
+      padding: 15px 18px;
+      border: 1px solid var(--ink);
+      background: #fbf8f0;
+      text-decoration: none;
+      color: var(--ink);
+    }
+    .live:hover { background: #fffdf7; }
+    .live:hover .live-arrow { transform: translateX(3px); }
+    .live-dot {
+      width: 9px;
+      height: 9px;
+      flex: none;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(217, 72, 28, 0.13);
+    }
+    .live-kicker {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+    .live-copy { font-size: 14px; color: var(--muted); }
+    .live-arrow {
+      margin-left: auto;
+      font-size: 20px;
+      color: var(--accent);
+      transition: transform 0.15s;
+    }
+    @media (max-width: 700px) {
+      .live { flex-wrap: wrap; gap: 8px 12px; }
+      .live-copy { width: 100%; order: 3; }
+      .live-arrow { order: 2; }
+    }
     @media (max-width: 900px) {
       main { grid-template-columns: 1fr; }
       .top nav { display: none; }
@@ -67,10 +108,18 @@
       </div>
       <nav>
         <a href="demo/countersign-demo.mp4">Demo</a>
+        <a href="https://countersign-proof.kiter0211.workers.dev/">Live proof</a>
         <a href="blog/building-countersign.html">Build note</a>
         <a href="https://github.com/PhiBao/countersign">GitHub</a>
       </nav>
     </header>
+
+    <a class="live" href="https://countersign-proof.kiter0211.workers.dev/">
+      <span class="live-dot" aria-hidden="true"></span>
+      <span class="live-kicker">Live proof ledger</span>
+      <span class="live-copy">Two receipts, the full diff, and the countersignature — read-only.</span>
+      <span class="live-arrow" aria-hidden="true">→</span>
+    </a>
 
     <main>
       <section>
@@ -84,7 +133,7 @@
           keeps the record.
         </p>
         <ul class="links">
-          <li><a href="demo/countersign-demo.mp4"><span class="label">Watch the 66-second demo</span><span class="meta">MP4 · 1080p</span></a></li>
+          <li><a href="demo/countersign-demo.mp4"><span class="label">Watch the 78-second demo</span><span class="meta">MP4 · 1080p</span></a></li>
           <li><a href="blog/building-countersign.html"><span class="label">Read how it was built</span><span class="meta">Build note</span></a></li>
           <li><a href="https://github.com/PhiBao/countersign"><span class="label">Run it yourself</span><span class="meta">GitHub · Rust + Switch</span></a></li>
           <li><a href="diagrams/architecture.png"><span class="label">See the architecture</span><span class="meta">Diagram</span></a></li>
