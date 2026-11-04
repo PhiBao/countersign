@@ -1,7 +1,7 @@
 Countersign
 ===========
 
-Copyright (c) 2026 the Countersign authors. MIT licensed.
+Copyright (c) 2026 Kiter (PhiBao). MIT licensed.
 
 This repository vendors and depends on:
 
@@ -12,6 +12,10 @@ This repository vendors and depends on:
   Switch stack.
 - OpenCode (https://opencode.ai), invoked as the fixer's coding agent. Not
   bundled; the operator installs and authenticates it separately.
+
+All dependencies keep their own licenses. The MIT license above applies to
+Countersign's original code; the vendored Switch compose file remains under
+Switch's Apache-2.0 with Commons Clause terms.
 
 The `demo/orders` crate is original code written for this submission. Its
 bug is deliberate and documented in the README.
