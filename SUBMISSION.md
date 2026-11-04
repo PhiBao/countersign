@@ -67,6 +67,32 @@ The demo bug is deliberately seeded; the FAIL branch, tests, receipts, PR, and s
 - The viewer and ledger API are loopback-only and unauthenticated — a proof surface, not a dashboard.
 - `COUNTERSIGN_PR_MODE=local` produces a real merge on `countersign/landed`, not a PR; this is for offline reproduction.
 
+## Form-ready copy
+
+**Project name:** Countersign
+
+**Tagline:** No agent ships alone.
+
+**Track:** 01 — Best Business Workflow
+
+**Short description:**
+Countersign is a Switch room where AI agents propose changes, an independent verifier proves or refutes them with reproducible evidence, and a named person countersigns before anything lands.
+
+**Long description:**
+Coding agents now open more than 40% of GitHub's pull requests, but review has not scaled with generation. The agent that wrote a change is usually the one reporting whether it works — it grades its own homework, and the room has no way to tell. Countersign makes verification a separate job in the room. A fixer agent proposes a branch in its own checkout. A deterministic Rust verifier reproduces the reported failure on main, runs the full suite on the branch in a clean worktree, refuses branches that edit their own tests, and issues a receipt with the exact evidence. Only a person can countersign a passing receipt; only then does the change land as a real pull request. Switch is the control plane: rooms, roles, addressing policy, and the shared log. Remove it and there is no room, no role, no policy, and no record to sign.
+
+**Repo:** https://github.com/PhiBao/countersign
+
+**Demo video:** https://phibao.github.io/countersign/demo/countersign-demo.mp4
+
+**README:** https://github.com/PhiBao/countersign#readme
+
+**Blog:** https://phibao.github.io/countersign/blog/building-countersign.html
+
+**Built with:** Switch 0.31.0, Rust, Axum, tokio-tungstenite, rusqlite, React, Vite, TypeScript, OpenCode, Docker Compose, Mattermost, GitHub CLI.
+
+---
+
 ## Built during the window
 
 The Switch room, roles, room instructions, agent registrations, verifier, fixer harness, ledger, viewer, diagrams, and demo were built for this submission. OpenCode is an existing coding agent, as the brief allows.
