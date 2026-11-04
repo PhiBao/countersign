@@ -148,14 +148,28 @@ impl Verifier {
                 Vec::new()
             }
         };
-        let kind = participants
+        tracing::info!(
+            sender = %message.sender,
+            sender_name = %message.sender_name,
+            participants = ?participants,
+            "countersign authorisation"
+        );
+        // `sender` is the room's client id for the sender, while
+        // `list_participants` reports Switch participant ids; they are
+        // different namespaces. Resolve by name instead, and fail closed when
+        // the name is ambiguous or belongs to an agent.
+        let matches: Vec<&serde_json::Value> = participants
             .iter()
-            .find(|participant| {
-                participant.get("id").and_then(|value| value.as_str())
-                    == Some(message.sender.as_str())
+            .filter(|participant| {
+                participant.get("name").and_then(|value| value.as_str())
+                    == Some(message.sender_name.as_str())
             })
-            .and_then(|participant| participant.get("type"))
-            .and_then(|value| value.as_str());
+            .collect();
+        let kind = if matches.len() == 1 {
+            matches[0].get("type").and_then(|value| value.as_str())
+        } else {
+            None
+        };
 
         if kind != Some("user") {
             self.client
@@ -264,7 +278,12 @@ impl Verifier {
 #[async_trait]
 impl Handler for Verifier {
     async fn on_ready(&self, rooms: Vec<String>) -> Result<()> {
-        let Some(room) = rooms.first().cloned() else {
+        let Some(room) = self
+            .config
+            .room_id
+            .clone()
+            .or_else(|| rooms.first().cloned())
+        else {
             return Ok(());
         };
         *self.client.room_id.lock().await = Some(room.clone());
@@ -286,6 +305,11 @@ impl Handler for Verifier {
     }
 
     async fn on_message(&self, message: IncomingMessage) -> Result<()> {
+        if let Some(expected) = &self.config.room_id {
+            if &message.room_id != expected {
+                return Ok(());
+            }
+        }
         let body = strip_mention(&message.body);
         let lower = body.to_lowercase();
 
@@ -306,12 +330,8 @@ impl Handler for Verifier {
             return self.help(&message.room_id).await;
         }
 
-        self.client
-            .post_message(
-                &message.room_id,
-                "I didn't recognise that. Try `@verifier verify <branch>`, `@verifier countersign <receipt>` or `@verifier ledger`.",
-            )
-            .await?;
+        // Anything else addressed to the verifier is room conversation, not a
+        // command. Stay quiet rather than adding noise to the room.
         Ok(())
     }
 }
@@ -328,13 +348,7 @@ fn format_receipt(receipt: &Receipt) -> String {
 
     match receipt.verdict {
         Verdict::Pass => {
-            let summary = receipt
-                .suite_output
-                .lines()
-                .rev()
-                .find(|line| line.trim_start().starts_with("test result:"))
-                .map(|line| line.trim().to_string())
-                .unwrap_or_else(|| "the suite passed".to_string());
+            let summary = suite_summary(&receipt.suite_output);
             format!(
                 "**✅ PASS · `{id}`** · `{branch}`\n\
                  Commit `{short_sha}` · {files} · {seconds:.1}s\n\n\
@@ -356,7 +370,7 @@ fn format_receipt(receipt: &Receipt) -> String {
              Commit `{short_sha}` · {files} · {seconds:.1}s\n\n\
              {reason}\n\n\
              ```text\n{evidence}\n```\n\n\
-             Nothing can land from a failed receipt. `@fixer` can propose a corrected branch.",
+             Nothing can land from a failed receipt. The fixer can propose a corrected branch.",
             id = receipt.id,
             branch = receipt.branch,
             short_sha = short_sha,
@@ -375,6 +389,33 @@ fn format_receipt(receipt: &Receipt) -> String {
                 1200,
             ),
         ),
+    }
+}
+
+/// Sum the `test result:` lines across every test binary in the run.
+fn suite_summary(output: &str) -> String {
+    let mut passed = 0u64;
+    let mut failed = 0u64;
+    let mut seen = false;
+    for line in output.lines() {
+        let line = line.trim();
+        let Some(rest) = line.strip_prefix("test result:") else {
+            continue;
+        };
+        seen = true;
+        for part in rest.split(';') {
+            let part = part.trim();
+            if let Some(value) = part.strip_prefix("passed") {
+                passed += value.trim().parse::<u64>().unwrap_or(0);
+            } else if let Some(value) = part.strip_prefix("failed") {
+                failed += value.trim().parse::<u64>().unwrap_or(0);
+            }
+        }
+    }
+    if !seen {
+        "the suite passed".to_string()
+    } else {
+        format!("{passed} passed; {failed} failed")
     }
 }
 

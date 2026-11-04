@@ -228,7 +228,7 @@ impl SwitchClient {
                         self.cursor.store(cursor, Ordering::Relaxed);
                     }
                     self.attached.store(true, Ordering::Relaxed);
-                    let rooms = data
+                    let mut rooms = data
                         .get("rooms")
                         .and_then(Value::as_array)
                         .map(|rooms| {
@@ -239,6 +239,23 @@ impl SwitchClient {
                                 .collect::<Vec<_>>()
                         })
                         .unwrap_or_default();
+                    // An `all`-scope connection covers rooms without claiming
+                    // them, so `connection_state.rooms` is empty until the
+                    // client claims one. Discover membership explicitly.
+                    if rooms.is_empty() {
+                        match self.list_rooms().await {
+                            Ok(listed) => {
+                                rooms = listed
+                                    .iter()
+                                    .filter_map(|room| {
+                                        room.get("room_id").and_then(Value::as_str)
+                                    })
+                                    .map(str::to_string)
+                                    .collect();
+                            }
+                            Err(error) => warn!("could not list rooms: {error:#}"),
+                        }
+                    }
                     info!(?rooms, "connection open");
                     if rooms.is_empty() {
                         warn!("agent is not a member of any room yet");
@@ -263,6 +280,25 @@ impl SwitchClient {
                         .get("addressed")
                         .and_then(Value::as_bool)
                         .unwrap_or(false);
+                    let room_label = data
+                        .get("room_id")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("");
+                    let sender_label = payload
+                        .get("sender_name")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("");
+                    let body_label = payload
+                        .get("body")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("");
+                    info!(
+                        room = %room_label,
+                        sender = %sender_label,
+                        addressed,
+                        body = %body_label,
+                        "room message"
+                    );
                     if !addressed {
                         continue;
                     }
