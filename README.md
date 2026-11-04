@@ -140,8 +140,8 @@ The receipt is marked signed only after landing succeeds. A failed landing leave
 
 - Docker (with Compose v2)
 - Rust (stable; the repo builds with the 2021 edition)
-- Node 22+ and pnpm (only to build the viewer; a prebuilt `viewer/dist` can be committed)
-- An authenticated coding agent for the fixer: [OpenCode](https://opencode.ai) (`opencode auth login`) or Codex (`codex login`)
+- Node 22+ and pnpm only if you want to rebuild the viewer; the built viewer is committed
+- An authenticated coding agent for the fixer: [OpenCode](https://opencode.ai) (`opencode auth login`, tested) or Codex (`codex login`; set `COUNTERSIGN_FIXER_PROVIDER=codex`)
 - Optional: `gh` authenticated with `repo` scope for real pull requests
 
 ### 1. Start the Switch stack
