@@ -64,14 +64,14 @@ The first version of this loop was one-directional: the verifier said yes or no,
 So a failed receipt now goes back to the fixer with the exact output:
 
 ```text
-@fixer revise R-7BFAE3 — the receipt has the failing tests
+@fixer revise R-C3285C — the receipt has the failing tests
 and the exact output. Attempt 2/2.
 ```
 
 The fixer starts from the rejected branch, fixes what the proof caught, and proposes a retry. The second receipt is chained to the first:
 
 ```text
-attempt 2 · supersedes R-7BFAE3
+attempt 2 · supersedes R-C3285C
 ```
 
 That chain is the part I care about most. It shows what changed between attempts, why the first one failed, and who decided the second one was ready.
@@ -85,7 +85,7 @@ A receipt is only useful if the landing step trusts it. So the countersignature 
 An approver replies:
 
 ```text
-@verifier countersign R-B658D5
+@verifier countersign R-0176E1
 ```
 
 The verifier checks that the sender is a human in the room and one of the configured approvers. It re-checks that the branch still points at the commit it verified and that the base has not moved. Then it pushes **that commit** — not whatever the branch name points at now — and opens a real pull request with the receipt in the body.

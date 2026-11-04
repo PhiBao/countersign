@@ -197,7 +197,7 @@ A pull request opens (or the change lands on `countersign/landed` in local mode)
 You can also verify a real pull request in the configured repository:
 
 ```
-@verifier verify https://github.com/PhiBao/countersign/pull/7
+@verifier verify https://github.com/PhiBao/countersign/pull/8
 ```
 
 The verifier pins the PR head, refuses a PR that moves during the fetch, and issues a receipt for that exact commit.

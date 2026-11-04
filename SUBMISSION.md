@@ -19,11 +19,11 @@ A Switch room where AI agents propose changes, an independent verifier proves or
 | Project page | https://phibao.github.io/countersign/ |
 | Live proof ledger | https://countersign-proof.kiter0211.workers.dev/ |
 | Build note (Best Blog) | https://phibao.github.io/countersign/blog/building-countersign.html |
-| Live proof | https://github.com/PhiBao/countersign/pull/7 |
+| Live proof | https://github.com/PhiBao/countersign/pull/8 |
 
 ## The two-minute path for a judge
 
-1. Watch the 66-second video. It shows a real Mattermost room, a real FAIL receipt, the verifier handing the failure back to the fixer, a chained PASS on attempt two, a real countersignature, and a real GitHub pull request.
+1. Watch the 78-second video. It shows a real Mattermost room, a real FAIL receipt, the verifier handing the failure back to the fixer, a chained PASS on attempt two, a real countersignature, and a real GitHub pull request.
 2. Read the top of the README for the problem and the mechanism.
 3. Open the proof ledger screenshot / run `http://127.0.0.1:4090` after setup.
 4. If you want to reproduce: `./scripts/init-env.sh`, `docker compose up -d`, `./scripts/bootstrap.sh`, `./scripts/start-agents.sh`, then post the two messages from the README.
@@ -59,7 +59,7 @@ The demo bug is deliberately seeded; the FAIL branch, tests, receipts, PR, and s
 | **Use of Switch** | The room is the control plane; removing Switch removes roles, addressing, the shared log, and the identity behind a countersignature |
 | **Technical execution** | Protocol-level Rust agent, deterministic verification, scrubbed test execution, a closed retry loop, pinned landing, room documents, one-command stack, 20 tests, reproducible demo |
 | **Creativity and impact** | A real team problem (agent output outpacing review) with a structural mechanism — separation of duties plus a self-correcting retry — and a credible path beyond the demo |
-| **Presentation** | A 66-second demo with a FAIL that is visible, a PASS that is earned, a signature that is a person's, and a public build note |
+| **Presentation** | A 78-second demo with a FAIL that is visible, a PASS that is earned, a signature that is a person's, and a public build note |
 
 ## Known limitations (stated, not hidden)
 
@@ -97,7 +97,7 @@ Coding agents now open more than 40% of GitHub's pull requests, but review has n
 **Built with:** Switch 0.31.0, Rust, Axum, tokio-tungstenite, rusqlite, React, Vite, TypeScript, OpenCode, Docker Compose, Mattermost, GitHub CLI.
 
 **Message if the form asks for one:**
-Countersign is a Switch room where AI agents propose changes, an independent Rust verifier reproduces the failure and runs the proof, and a designated approver countersigns before a real pull request opens. A failed receipt becomes a fixer work order; attempt two chains to attempt one. The verifier has no model in the proof path. 66-second demo: https://phibao.github.io/countersign/demo/countersign-demo.mp4 — Repo: https://github.com/PhiBao/countersign — Built on Switch 0.31.0.
+Countersign is a Switch room where AI agents propose changes, an independent Rust verifier reproduces the failure and runs the proof, and a designated approver countersigns before a real pull request opens. A failed receipt becomes a fixer work order; attempt two chains to attempt one. The verifier has no model in the proof path. 78-second demo: https://phibao.github.io/countersign/demo/countersign-demo.mp4 — Repo: https://github.com/PhiBao/countersign — Built on Switch 0.31.0.
 
 ---
 
