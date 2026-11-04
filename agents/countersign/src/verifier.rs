@@ -22,8 +22,7 @@ pub struct Verifier {
 }
 
 impl Verifier {
-    pub fn new(config: Config, client: Arc<SwitchClient>) -> Result<Self> {
-        let ledger = Ledger::open(&config.ledger_path)?;
+    pub fn new(config: Config, client: Arc<SwitchClient>, ledger: Ledger) -> Result<Self> {
         Ok(Self {
             config,
             client,
@@ -214,7 +213,7 @@ impl Verifier {
                     .post_message(
                         &message.room_id,
                         &format!(
-                            "The countersignature was recorded, but landing failed: {error:#}\n\nNothing was merged. Fix the landing path and countersign again after a fresh verification."
+                            "I could not land it: {error:#}\n\nNothing was merged, and the receipt is still unsigned. Fix the landing path, then countersign again."
                         ),
                     )
                     .await?;
@@ -404,11 +403,11 @@ fn suite_summary(output: &str) -> String {
         };
         seen = true;
         for part in rest.split(';') {
-            let part = part.trim();
-            if let Some(value) = part.strip_prefix("passed") {
-                passed += value.trim().parse::<u64>().unwrap_or(0);
-            } else if let Some(value) = part.strip_prefix("failed") {
-                failed += value.trim().parse::<u64>().unwrap_or(0);
+            if let Some(value) = count_before(part, "passed") {
+                passed += value;
+            }
+            if let Some(value) = count_before(part, "failed") {
+                failed += value;
             }
         }
     }
@@ -417,6 +416,12 @@ fn suite_summary(output: &str) -> String {
     } else {
         format!("{passed} passed; {failed} failed")
     }
+}
+
+/// `" ok. 8 passed"` + `"passed"` -> `8`.
+fn count_before(part: &str, word: &str) -> Option<u64> {
+    let index = part.find(word)?;
+    part[..index].split_whitespace().last()?.parse().ok()
 }
 
 fn truncate(text: &str, limit: usize) -> String {

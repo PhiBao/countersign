@@ -267,7 +267,7 @@ pub async fn verify(config: &Config, branch: &str) -> Result<Outcome> {
             )),
             commit_sha,
             changed_files,
-            base_output: base.tail(1200),
+            base_output: cap(&base.combined, 20_000),
             suite_output: String::new(),
             duration_ms,
         });
@@ -306,8 +306,8 @@ pub async fn verify(config: &Config, branch: &str) -> Result<Outcome> {
             )),
             commit_sha,
             changed_files,
-            base_output: base.tail(1200),
-            suite_output: suite.tail(2400),
+            base_output: cap(&base.combined, 20_000),
+            suite_output: cap(&suite.combined, 20_000),
             duration_ms,
         });
     }
@@ -317,10 +317,22 @@ pub async fn verify(config: &Config, branch: &str) -> Result<Outcome> {
         reason: None,
         commit_sha,
         changed_files,
-        base_output: base.tail(1200),
-        suite_output: suite.tail(2400),
+        base_output: cap(&base.combined, 20_000),
+        suite_output: cap(&suite.combined, 20_000),
         duration_ms,
     })
+}
+
+fn cap(text: &str, limit: usize) -> String {
+    if text.len() <= limit {
+        return text.to_string();
+    }
+    let start = text
+        .char_indices()
+        .find(|(index, _)| *index >= text.len() - limit)
+        .map(|(index, _)| index)
+        .unwrap_or(0);
+    text[start..].to_string()
 }
 
 pub fn receipt_id() -> String {

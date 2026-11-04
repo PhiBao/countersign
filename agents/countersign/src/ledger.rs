@@ -46,6 +46,7 @@ impl Verdict {
     }
 }
 
+#[derive(Clone)]
 pub struct Ledger {
     path: PathBuf,
 }
