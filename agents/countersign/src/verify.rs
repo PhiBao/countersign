@@ -3,6 +3,9 @@
 //! No model is involved in this path. The verifier reproduces the reported
 //! failure on the base revision, runs the whole suite on the proposed branch,
 //! refuses branches that touch the tests, and records exactly what it ran.
+//!
+//! One worktree is used for both runs so cargo sees one path and cannot reuse
+//! a stale test binary from the other revision.
 
 use anyhow::{bail, Context, Result};
 use chrono::Utc;
@@ -23,27 +26,21 @@ pub struct Outcome {
     pub duration_ms: i64,
 }
 
-struct Worktrees {
-    base: PathBuf,
-    branch: PathBuf,
+struct Worktree {
+    dir: PathBuf,
     repo: PathBuf,
 }
 
-impl Worktrees {
-    async fn create(repo: &Path, branch: &str, base_ref: &str, id: &str) -> Result<Self> {
-        let root = repo.join(".worktrees").join(format!("verify-{id}"));
-        let base = root.join("base");
-        let branch_dir = root.join("branch");
-        let base_string = base.to_string_lossy().to_string();
-        let branch_string = branch_dir.to_string_lossy().to_string();
-
-        let add_base = run(
+impl Worktree {
+    async fn create(repo: &Path, base_ref: &str, id: &str) -> Result<Self> {
+        let dir = repo.join(".worktrees").join(format!("verify-{id}"));
+        let added = run(
             "git",
             &[
                 "worktree".to_string(),
                 "add".to_string(),
                 "--detach".to_string(),
-                base_string.clone(),
+                dir.to_string_lossy().to_string(),
                 base_ref.to_string(),
             ],
             repo,
@@ -51,34 +48,32 @@ impl Worktrees {
             Duration::from_secs(60),
         )
         .await?;
-        if !add_base.success {
-            bail!("git worktree add (base) failed: {}", add_base.tail(800));
+        if !added.success {
+            bail!("git worktree add failed: {}", added.tail(800));
         }
+        Ok(Self {
+            dir,
+            repo: repo.to_path_buf(),
+        })
+    }
 
-        let add_branch = run(
+    async fn checkout(&self, branch: &str) -> Result<()> {
+        let checked = run(
             "git",
             &[
-                "worktree".to_string(),
-                "add".to_string(),
+                "checkout".to_string(),
                 "--detach".to_string(),
-                branch_string,
                 branch.to_string(),
             ],
-            repo,
+            &self.dir,
             &[],
             Duration::from_secs(60),
         )
         .await?;
-        if !add_branch.success {
-            let _ = cleanup(repo, &base_string).await;
-            bail!("git worktree add (branch) failed: {}", add_branch.tail(800));
+        if !checked.success {
+            bail!("git checkout {branch} failed: {}", checked.tail(600));
         }
-
-        Ok(Self {
-            base,
-            branch: branch_dir,
-            repo: repo.to_path_buf(),
-        })
+        Ok(())
     }
 
     async fn remove(&self) {
@@ -88,20 +83,7 @@ impl Worktrees {
                 "worktree".to_string(),
                 "remove".to_string(),
                 "--force".to_string(),
-                self.base.to_string_lossy().to_string(),
-            ],
-            &self.repo,
-            &[],
-            Duration::from_secs(60),
-        )
-        .await;
-        let _ = run(
-            "git",
-            &[
-                "worktree".to_string(),
-                "remove".to_string(),
-                "--force".to_string(),
-                self.branch.to_string_lossy().to_string(),
+                self.dir.to_string_lossy().to_string(),
             ],
             &self.repo,
             &[],
@@ -109,23 +91,6 @@ impl Worktrees {
         )
         .await;
     }
-}
-
-async fn cleanup(repo: &Path, worktree: &str) -> Result<()> {
-    let _ = run(
-        "git",
-        &[
-            "worktree".to_string(),
-            "remove".to_string(),
-            "--force".to_string(),
-            worktree.to_string(),
-        ],
-        repo,
-        &[],
-        Duration::from_secs(60),
-    )
-    .await;
-    Ok(())
 }
 
 fn valid_branch(branch: &str) -> bool {
@@ -230,7 +195,7 @@ pub async fn verify(config: &Config, branch: &str) -> Result<Outcome> {
     }
 
     let id = &uuid::Uuid::new_v4().simple().to_string()[..8];
-    let worktrees = Worktrees::create(&config.repo, branch, &config.base_ref, id).await?;
+    let worktree = Worktree::create(&config.repo, &config.base_ref, id).await?;
 
     let target_dir = config.repo.join(".countersign/target");
     let envs: Vec<(&str, String)> = vec![(
@@ -248,31 +213,49 @@ pub async fn verify(config: &Config, branch: &str) -> Result<Outcome> {
         "--".to_string(),
         "--exact".to_string(),
     ];
-    let base = run(
+    let base = match run(
         "cargo",
         &repro_args,
-        &worktrees.base,
+        &worktree.dir,
         &envs,
         Duration::from_secs(240),
     )
-    .await?;
+    .await
+    {
+        Ok(output) => output,
+        Err(error) => {
+            worktree.remove().await;
+            return Err(error);
+        }
+    };
+
+    if let Err(error) = worktree.checkout(branch).await {
+        worktree.remove().await;
+        return Err(error);
+    }
 
     let suite_args = vec![
         "test".to_string(),
         "-p".to_string(),
         config.test_package.clone(),
     ];
-    let suite = run(
+    let suite = match run(
         "cargo",
         &suite_args,
-        &worktrees.branch,
+        &worktree.dir,
         &envs,
         Duration::from_secs(240),
     )
-    .await?;
+    .await
+    {
+        Ok(output) => output,
+        Err(error) => {
+            worktree.remove().await;
+            return Err(error);
+        }
+    };
 
-    worktrees.remove().await;
-
+    worktree.remove().await;
     let duration_ms = started.elapsed().as_millis() as i64;
 
     if base.success {
@@ -291,17 +274,35 @@ pub async fn verify(config: &Config, branch: &str) -> Result<Outcome> {
     }
 
     if !suite.success {
-        let failing = suite
+        let failing: Vec<String> = suite
             .combined
             .lines()
-            .find(|line| line.contains("FAILED") || line.starts_with("test result: FAILED"))
-            .or_else(|| suite.combined.lines().find(|line| line.contains("panicked")))
-            .unwrap_or("the suite exited non-zero");
+            .filter(|line| {
+                line.trim_start().starts_with("test ") && line.trim_end().ends_with("FAILED")
+            })
+            .map(|line| {
+                line.trim()
+                    .trim_end_matches("FAILED")
+                    .trim()
+                    .trim_end_matches("...")
+                    .trim()
+                    .trim_start_matches("test ")
+                    .to_string()
+            })
+            .collect();
+        let detail = if failing.is_empty() {
+            "the suite exited non-zero".to_string()
+        } else {
+            failing
+                .iter()
+                .map(|name| format!("`{name}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
         return Ok(Outcome {
             verdict: Verdict::Fail,
             reason: Some(format!(
-                "The suite still fails on the branch: {}",
-                failing.trim()
+                "The suite still fails on the branch: {detail}."
             )),
             commit_sha,
             changed_files,

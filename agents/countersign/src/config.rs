@@ -26,6 +26,7 @@ pub struct Config {
     pub repo: PathBuf,
     pub ledger_path: PathBuf,
     pub role_name: Option<String>,
+    pub room_id: Option<String>,
     pub allowed_prefix: String,
     pub test_package: String,
     pub repro_test: String,
@@ -33,6 +34,14 @@ pub struct Config {
     pub pr_mode: PrMode,
     pub github_repo: Option<String>,
     pub base_ref: String,
+    pub fixer_provider: FixerProvider,
+    pub fixer_model: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FixerProvider {
+    OpenCode,
+    Codex,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,6 +89,7 @@ impl Config {
             repo,
             ledger_path,
             role_name: env::var("COUNTERSIGN_ROLE_NAME").ok(),
+            room_id: env::var("COUNTERSIGN_ROOM_ID").ok().filter(|id| !id.is_empty()),
             allowed_prefix: env::var("COUNTERSIGN_ALLOWED_PREFIX")
                 .unwrap_or_else(|_| "demo/orders/src".into()),
             test_package: env::var("COUNTERSIGN_TEST_PACKAGE")
@@ -91,6 +101,15 @@ impl Config {
             pr_mode,
             github_repo: env::var("COUNTERSIGN_GITHUB_REPO").ok(),
             base_ref: env::var("COUNTERSIGN_BASE_REF").unwrap_or_else(|_| "main".into()),
+            fixer_provider: match env::var("COUNTERSIGN_FIXER_PROVIDER").as_deref() {
+                Ok("codex") => FixerProvider::Codex,
+                Ok("opencode") | Err(_) => FixerProvider::OpenCode,
+                other => anyhow::bail!(
+                    "COUNTERSIGN_FIXER_PROVIDER must be 'opencode' or 'codex' (got {other:?})"
+                ),
+            },
+            fixer_model: env::var("COUNTERSIGN_FIXER_MODEL")
+                .unwrap_or_else(|_| "opencode-go/gpt-5.6-luna".into()),
         })
     }
 }
