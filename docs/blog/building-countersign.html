@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>No agent ships alone · Countersign</title>
+  <meta name="description" content="Building a countersignature for AI work on Switch: a Rust verifier, an existing coding agent, and one human decision." />
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --paper: #f4f1e8;
+      --ink: #141312;
+      --muted: #6f695d;
+      --rule: #d9d2c2;
+      --accent: #d9481c;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+      --sans: "Space Grotesk", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { background: var(--paper); }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: 19px;
+      line-height: 1.68;
+      -webkit-font-smoothing: antialiased;
+    }
+    .top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 22px clamp(20px, 5vw, 64px);
+      border-bottom: 1px solid var(--rule);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--ink); }
+    .brand img { width: 34px; height: 34px; }
+    .brand strong { font-size: 20px; font-weight: 600; letter-spacing: -0.03em; }
+    .top a.back { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); text-decoration: none; }
+    .top a.back:hover { color: var(--accent); }
+    article { max-width: 760px; margin: 0 auto; padding: clamp(40px, 7vw, 84px) 24px 80px; }
+    .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent); margin: 0 0 18px; }
+    h1 { font-size: clamp(38px, 5vw, 56px); line-height: 1.07; letter-spacing: -0.045em; font-weight: 600; margin: 0 0 22px; }
+    h2 { font-size: clamp(24px, 3vw, 30px); line-height: 1.2; letter-spacing: -0.03em; font-weight: 600; margin: 56px 0 18px; }
+    h3 { font-size: 21px; letter-spacing: -0.02em; margin: 38px 0 12px; }
+    p { margin: 0 0 22px; }
+    em { color: var(--muted); }
+    strong { font-weight: 600; }
+    a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    blockquote {
+      margin: 34px 0;
+      padding: 6px 0 6px 22px;
+      border-left: 4px solid var(--accent);
+      font-size: 22px;
+      line-height: 1.45;
+      letter-spacing: -0.02em;
+    }
+    blockquote p { margin: 0; }
+    code { font-family: var(--mono); font-size: 0.82em; background: #ece7da; padding: 0.15em 0.35em; }
+    pre { background: var(--ink); color: #ece7da; padding: 20px 22px; overflow-x: auto; margin: 26px 0; }
+    pre code { background: none; padding: 0; font-size: 0.78em; line-height: 1.65; color: inherit; }
+    hr { border: 0; border-top: 1px solid var(--rule); margin: 48px 0; }
+    ul, ol { padding-left: 1.2em; margin: 0 0 24px; }
+    li { margin: 0 0 10px; }
+    footer { border-top: 1px solid var(--rule); padding: 26px clamp(20px, 5vw, 64px); display: flex; justify-content: space-between; gap: 16px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--accent); }
+    @media (max-width: 640px) {
+      body { font-size: 17px; }
+      .top a.back span { display: none; }
+      footer { flex-direction: column; }
+    }
+    @media print {
+      .top, footer { display: none; }
+      article { max-width: none; padding: 0; }
+      a { color: inherit; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="../">
+      <img src="../favicon.svg" alt="" />
+      <strong>Countersign</strong>
+    </a>
+    <a class="back" href="../">← <span>Back to the project</span></a>
+  </header>
+  <article>
+    <p class="kicker">Build note · Flip the Switch Hackathon</p>
+    <h1>No agent ships alone: building a countersignature for AI work on Switch</h1>
+<p><em>How a Rust verifier, an existing coding agent, and one human decision became a Switch room where agent work has to be proven before it lands.</em></p>
+<hr />
+<p>Coding agents are now a normal part of a team&rsquo;s output. In September 2026, agents started more than 40% of the pull requests on GitHub — roughly 110 million of them. Review did not scale with generation: under high AI adoption, PRs are larger, review time is up sharply, and more changes merge with no review at all.</p>
+<p>The bottleneck is no longer writing code. It is trusting it.</p>
+<p>Most agent-in-chat setups make this worse in a subtle way: the agent that wrote the change is also the one reporting whether it works. It runs the tests in a terminal only it can see, summarizes the result, and asks a person to believe the summary. The agent grades its own homework, and the room has no way to tell.</p>
+<p><a href="https://github.com/PhiBao/countersign">Countersign</a> is my answer to that, built for the Flip the Switch Hackathon. The rule is structural:</p>
+<blockquote>
+<p><strong>The proposer cannot verify. The verifier cannot write. Only a person can countersign. Only a passing receipt can be countersigned.</strong></p>
+</blockquote>
+<p>This post is about why that shape matters, how Switch made it possible, and the sharp edges I hit while building it — so the next person building a Switch workflow can skip them.</p>
+<hr />
+<h2>Why Switch, and not another bot</h2>
+<p>A Slack bot can post a message. It cannot give you a <strong>role</strong> that outlives the person holding it, an <strong>addressing policy</strong> that decides who may ask whom, or a shared log that every participant reads from. Those are the primitives Countersign needs, and they are exactly what Switch provides:</p>
+<ul>
+<li><strong>A room</strong> is the channel plus a durable log and a shared briefing.</li>
+<li><strong>Roles</strong> are jobs, not agents. <code>@verifier</code> reaches whoever holds the verifier job, and an exclusive role means only one agent can hold it at a time.</li>
+<li><strong>Addressing policy</strong> decides who may instruct an agent — the owner, the owner&rsquo;s agents, or anyone in the room.</li>
+<li><strong>The agent protocol</strong> lets any agent join: events down a WebSocket, operations up over HTTP.</li>
+</ul>
+<p>That last point mattered most. I did not want a desktop app in the loop. I wanted the verifier to be a process I could read, test, and reproduce. So Countersign&rsquo;s verifier is a Rust client that speaks the protocol directly.</p>
+<p>The strongest test of whether Switch is load-bearing: remove it and the product disappears. No rooms, no roles, no addressing policy, no shared record to attach a receipt to, no identity for a countersignature. It is not a bot bolted onto a channel; the room is the control plane.</p>
+<hr />
+<h2>The shape of the workflow</h2>
+<p>One room, two agents, one person:</p>
+<pre><code>Person        reports the failing refund total
+Fixer         proposes a branch in its own checkout
+Verifier      reproduces the failure on main, runs the full suite on the branch,
+              refuses branches that edit their own tests, issues a receipt
+Person        countersigns the passing receipt
+Verifier      opens the pull request (or merges locally)
+</code></pre>
+<p>The fixer is <strong>OpenCode</strong>, an existing coding agent, driven in a disposable copy of the repository. The verifier is <strong>deterministic Rust</strong> — no model calls in the proof path.</p>
+<p>They genuinely cannot be one agent. They have different capabilities, different credentials, and different failure modes. The fixer is creative and untrusted; the verifier is narrow and trusted. Collapsing them is what every &ldquo;agent reports its own tests&rdquo; workflow does, and it is the thing that makes the report worthless.</p>
+<h3>The receipt</h3>
+<p>Every verification produces a receipt:</p>
+<ul>
+<li>the branch and commit SHA,</li>
+<li>the changed files,</li>
+<li>the exact command output from reproducing the failure on <code>main</code>,</li>
+<li>the exact output from the full suite on the branch,</li>
+<li>a verdict and a duration.</li>
+</ul>
+<p>The receipt is posted to the room and stored in a SQLite ledger. The room is the permanent record; the ledger is its index.</p>
+<p>A person replies <code>@verifier countersign R-XXXXXX</code>. The verifier resolves the sender through the room&rsquo;s participant list and requires a <strong>human</strong>. An agent&rsquo;s countersignature is refused. Only then does it push the branch and open a pull request with the receipt in the body. If landing fails, the receipt stays unsigned.</p>
+<h3>The checks that make it a gate</h3>
+<p>The verifier is deliberately boring. Before it runs anything, it rejects a branch that touches its own tests (<code>demo/orders/tests/**</code>) or anything outside the fixture. Then:</p>
+<ol>
+<li>Create a clean worktree at <code>main</code>.</li>
+<li>Run the reported regression test. It <strong>must fail</strong> — otherwise the verifier refuses to certify a fix for a bug that is not there.</li>
+<li>Check out the branch in the same worktree.</li>
+<li>Run the <strong>full</strong> suite. It must pass.</li>
+</ol>
+<p>A passing regression test is not proof. A branch that edits the test is not a fix. A fix for a bug that does not reproduce is not a fix. Each of those is a real failure mode, and each one produces a FAIL receipt rather than a green check.</p>
+<hr />
+<h2>Building the Switch client in Rust</h2>
+<p>Switch&rsquo;s agent protocol is small enough to implement directly: one WebSocket for events, HTTP for operations.</p>
+<p>Two details are easy to miss:</p>
+<ol>
+<li><strong>The server sends application-level <code>ping</code> frames, not WebSocket protocol pings.</strong> The client must answer <code>{"type":"pong","cursor":n}</code> within the heartbeat TTL (6 seconds), or the connection is swept.</li>
+<li><strong>An <code>all</code>-scope connection covers rooms without claiming them.</strong> <code>connection_state.rooms</code> can be empty even though the agent is a member of several rooms. I had to call <code>list_rooms</code> and then <code>connect_to_room</code> explicitly. The first version of the client sat there connected and silent, which is a very confusing failure.</li>
+</ol>
+<p>The operations I use are <code>connect_to_room</code>, <code>assume_role</code>, <code>post_message</code>, and <code>list_participants</code>. I read the operation list at startup rather than hard-coding it, which is what the protocol asks for.</p>
+<p>Registration is the usual one-time exchange: a registration key creates the agent, returns an API key once, and <code>overwrite: true</code> rotates it on re-runs. The bootstrap script is idempotent, because a demo you cannot reset is a demo you cannot trust.</p>
+<p>Roles are the part I would keep in any Switch project. <code>@fixer</code> and <code>@verifier</code> are jobs, and the room&rsquo;s instructions travel with the job. The verifier holds an <strong>exclusive</strong> role, so two verifiers cannot issue contradictory receipts. That is a policy guarantee, not a prompt.</p>
+<hr />
+<h2>Three sharp edges worth knowing</h2>
+<h3>1. Coding agents resolve project roots in their own ways</h3>
+<p>The fixer runs OpenCode in a checkout of the repository. I first used a git worktree. OpenCode followed the worktree&rsquo;s git directory back to the operator&rsquo;s checkout and edited <code>main</code> — exactly what the design is supposed to prevent.</p>
+<p>The fix was to give the agent a <strong>plain copy with no <code>.git</code> at all</strong>, outside the repository, and to have the harness commit the result through a worktree the agent never sees. The agent gets a disposable workspace; the repository stays untouched until a human signs.</p>
+<p>There was a second layer: the child process inherited <code>PWD</code> from the harness, so even with <code>current_dir</code> set, the agent resolved the old project root. Setting <code>PWD</code> explicitly fixed it. If you drive a coding agent from a service, set both the working directory and <code>PWD</code>.</p>
+<h3>2. Cargo can reuse a stale test binary between worktrees</h3>
+<p>The verifier created two worktrees (main and branch) and shared one <code>CARGO_TARGET_DIR</code>. The branch run silently executed the base worktree&rsquo;s test binary, so a failing branch looked like it failed for the wrong reason.</p>
+<p>Using <strong>one worktree and checking out the base, then the branch</strong>, keeps the path stable and forces cargo to rebuild the crate. If you use two worktrees, give each its own target directory. This is the kind of bug that makes a verification product lie, so it is worth testing explicitly.</p>
+<h3>3. Mattermost does not live-update in a headless browser</h3>
+<p>The demo recorder drives the Mattermost web client with Playwright. The channel loaded, but new messages never appeared: the websocket did not connect in that context. The fix for the recording harness was to record each state <strong>after</strong> it exists, opening a fresh page per clip. That also made the edit better: no dead time waiting for an agent.</p>
+<p>This is a harness problem, not a Switch problem — but if you script a demo, plan for it.</p>
+<hr />
+<h2>What is real, and what is not</h2>
+<p>Everything in the proof path is real:</p>
+<ul>
+<li>Switch rooms, roles, addressing, and the log run on a self-hosted Switch 0.31.0 stack with bundled Mattermost.</li>
+<li>The verifier is a real protocol client, not the Console.</li>
+<li>The reproduction and test runs are real <code>git</code> and <code>cargo</code> invocations in a clean worktree.</li>
+<li>The countersignature is checked against the room&rsquo;s participants and refused for agents.</li>
+<li>The pull request is a real GitHub PR with the receipt in the body.</li>
+</ul>
+<p>The demo&rsquo;s bug is deliberately seeded: a half-cent rounding error in a checkout fixture. That is what makes the demo reproducible. The FAIL branch (<code>hotfix/naive-rounding</code>) is a real one-line fix that passes the reported test and fails the invariants. The verifier catches it for the right reason.</p>
+<p>The one honest limitation: the human check resolves the sender by room participant name, because Switch exposes client ids and participant ids in different namespaces. A production build should map the bridge identity to a Switch user id and sign receipts with a key. That is the next step, not a hidden assumption.</p>
+<hr />
+<h2>Advice for the next Switch workflow</h2>
+<ul>
+<li><strong>Use roles, not names.</strong> A job survives the agent being replaced. <code>@reviewer</code> is a better interface than <code>@alice-reviewer-2</code>.</li>
+<li><strong>Write room instructions once.</strong> They are the briefing every agent reads on join. Do not repeat team conventions in every agent prompt.</li>
+<li><strong>Set addressing policy deliberately.</strong> The default is owner-only. A colleague who cannot get an answer usually has not been admitted, not found a bug.</li>
+<li><strong>Pin the server version.</strong> <code>SWITCH_VERSION=0.31.0</code>. The protocol and Console are versioned separately.</li>
+<li><strong>Use the bundled Mattermost for the demo.</strong> No workspace admin, no OAuth app, no public URL. Connect Slack or Teams later.</li>
+<li><strong>Do not build a chatbot and call it a workflow.</strong> The judges&rsquo; own guide says it: if one agent answering questions is the whole product, a webhook could have done it. Find the second job that has to happen somewhere else.</li>
+</ul>
+<hr />
+<h2>Try it</h2>
+<p>The repository contains the whole loop, a one-command local stack, the demo fixture, and the proof ledger:</p>
+<p><strong>https://github.com/PhiBao/countersign</strong></p>
+<p>The demo is 66 seconds: a hotfix is rejected, the real fix passes, a person signs, and a pull request opens. The ledger keeps both receipts.</p>
+<p>If you take one idea from this: <strong>the valuable agent is not the one that writes the code. It is the one that can prove the code is safe to land — and the person who decides that it is.</strong></p>
+<p>No agent ships alone.</p>
+<hr />
+<p><em>Built for the Flip the Switch Hackathon (WeMakeDevs × DevTools Academy, powered by Switch AI), Track 01 — Best Business Workflow.</em></p>
+  </article>
+  <footer>
+    <span>Countersign · No agent ships alone</span>
+    <a href="https://github.com/PhiBao/countersign">github.com/PhiBao/countersign</a>
+  </footer>
+</body>
+</html>

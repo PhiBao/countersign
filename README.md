@@ -6,7 +6,7 @@ Countersign is a Switch room where AI agents propose changes, an independent ver
 
 Built for the **Flip the Switch Hackathon** (WeMakeDevs × DevTools Academy, powered by Switch AI), **Track 01 — Best Business Workflow**.
 
-**▶ [Watch the 66-second demo](docs/demo/countersign-demo.mp4)**
+**▶ [Watch the 66-second demo](docs/demo/countersign-demo.mp4)** · **[Read the build note](https://phibao.github.io/countersign/blog/building-countersign.html)** · **[Project page](https://phibao.github.io/countersign/)**
 
 ![Countersign sequence: propose, prove, countersign, land](docs/diagrams/sequence.png)
 
