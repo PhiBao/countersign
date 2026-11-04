@@ -172,8 +172,8 @@ Per-repository behaviour lives in [`countersign.toml`](countersign.toml): base r
 ### 3. Build the viewer and start the agents
 
 ```bash
-./scripts/doctor.sh          # read-only preflight: stack, agents, model, tests
 ./scripts/start-agents.sh
+./scripts/doctor.sh          # read-only preflight: stack, agents, model, tests
 ```
 
 Open **http://127.0.0.1:4090** for the proof ledger and **http://127.0.0.1:8065** for Mattermost (sign in as `user` with the password from `.env`).
