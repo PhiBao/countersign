@@ -85,11 +85,11 @@ if [ -z "$ROOM_ID" ] || [ "$ROOM_ID" = "null" ]; then
   ROOM="$(curl -fsS -X POST "$BASE/agents/$VERIFIER_ID/ops/create_room" \
     -H "Authorization: Bearer $VERIFIER_KEY" \
     -H 'content-type: application/json' \
-    -d "$(jq -n '{
+    -d "$(jq -n --arg user "$MATTERMOST_USER" '{
       name: "checkout-incidents",
       description: "Small, verified changes to the checkout service. Agents propose; an independent verifier proves; a person countersigns.",
       agent_names: ["countersign-fixer", "countersign-verifier"],
-      user_names: ["user"],
+      user_names: [$user],
       channel_type: "channel_public",
       instructions: "This room ships small, verified changes to the checkout service in demo/orders.\n\nHow we work:\n- A person reports a problem. The fixer proposes a branch. It never lands its own work and never opens a pull request.\n- The verifier checks the proposal in a clean worktree: it reproduces the reported failure on main, runs the full suite on the branch, and refuses any branch that edits its own tests. It issues a receipt with the exact evidence.\n- A person countersigns a passing receipt. Only then does the change land.\n- If verification fails, the fixer may propose a correction. Nobody argues with a receipt; they produce a better branch.\n- Say what failed plainly. Never present a proposal as a fix until a receipt says PASS.",
       roles: [
