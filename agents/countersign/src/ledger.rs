@@ -199,3 +199,50 @@ impl Ledger {
         Ok(rows)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Ledger, Receipt, Verdict};
+
+    fn sample() -> Receipt {
+        Receipt {
+            id: "R-TEST01".into(),
+            room_id: "room".into(),
+            branch: "fix/x".into(),
+            commit_sha: "abc123".into(),
+            verdict: Verdict::Pass,
+            reason: None,
+            changed_files: vec!["demo/orders/src/lib.rs".into()],
+            base_output: "failed".into(),
+            suite_output: "passed".into(),
+            duration_ms: 1234,
+            created_at: "2026-11-04T10:00:00Z".into(),
+            countersigned_by: None,
+            countersigned_at: None,
+            landed_url: None,
+        }
+    }
+
+    #[test]
+    fn a_receipt_round_trips_and_is_signed_once() {
+        let path = std::env::temp_dir().join(format!(
+            "countersign-test-{}.sqlite",
+            uuid::Uuid::new_v4()
+        ));
+        let ledger = Ledger::open(&path).expect("open");
+        ledger.insert(&sample()).expect("insert");
+        let stored = ledger.get("R-TEST01").expect("get").expect("present");
+        assert_eq!(stored.verdict, Verdict::Pass);
+        assert!(stored.countersigned_by.is_none());
+
+        ledger
+            .countersign("R-TEST01", "Ada", Some("https://example.test/pr/1"))
+            .expect("sign");
+        let signed = ledger.get("R-TEST01").expect("get").expect("present");
+        assert_eq!(signed.countersigned_by.as_deref(), Some("Ada"));
+        assert_eq!(signed.landed_url.as_deref(), Some("https://example.test/pr/1"));
+        assert_eq!(ledger.recent(10).expect("recent").len(), 1);
+
+        let _ = std::fs::remove_file(path);
+    }
+}

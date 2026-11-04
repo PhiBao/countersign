@@ -1,0 +1,17 @@
+Countersign
+===========
+
+Copyright (c) 2026 the Countersign authors. MIT licensed.
+
+This repository vendors and depends on:
+
+- Switch (https://github.com/sandbox-quantum/switch), Apache-2.0 with
+  Commons Clause. `docker-compose.yml` is the standalone Compose contract
+  published by the Switch project, pinned to server 0.31.0.
+- Mattermost Team Edition, used as the bundled chat surface of the local
+  Switch stack.
+- OpenCode (https://opencode.ai), invoked as the fixer's coding agent. Not
+  bundled; the operator installs and authenticates it separately.
+
+The `demo/orders` crate is original code written for this submission. Its
+bug is deliberate and documented in the README.

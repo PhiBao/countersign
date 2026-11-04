@@ -7,9 +7,7 @@ use tokio::process::Command;
 #[derive(Debug, Clone)]
 pub struct CommandOutput {
     pub success: bool,
-    pub code: Option<i32>,
     pub combined: String,
-    pub duration: Duration,
 }
 
 impl CommandOutput {
@@ -60,10 +58,9 @@ pub async fn run(
         combined.push_str("\n");
         combined.push_str(&String::from_utf8_lossy(&output.stderr));
     }
+    let _ = started.elapsed();
     Ok(CommandOutput {
         success: output.status.success(),
-        code: output.status.code(),
         combined,
-        duration: started.elapsed(),
     })
 }

@@ -1,7 +1,7 @@
 //! The verifier: independent, deterministic, and the only role that can issue
 //! a receipt a person may countersign.
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use async_trait::async_trait;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -434,4 +434,36 @@ fn truncate(text: &str, limit: usize) -> String {
         .map(|(index, _)| index)
         .unwrap_or(0);
     format!("…{}", &text[start..])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{count_before, suite_summary};
+
+    #[test]
+    fn counts_a_single_test_result_line() {
+        assert_eq!(count_before(" ok. 8 passed", "passed"), Some(8));
+        assert_eq!(count_before(" 0 failed", "failed"), Some(0));
+    }
+
+    #[test]
+    fn sums_every_test_binary() {
+        let output = "\
+running 2 tests
+test result: ok. 2 passed; 0 failed; 0 ignored
+
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored
+
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored
+";
+        assert_eq!(suite_summary(output), "8 passed; 0 failed");
+    }
+
+    #[test]
+    fn reports_failures_across_binaries() {
+        let output = "test result: ok. 2 passed; 0 failed\ntest result: FAILED. 1 passed; 2 failed";
+        assert_eq!(suite_summary(output), "3 passed; 2 failed");
+    }
 }

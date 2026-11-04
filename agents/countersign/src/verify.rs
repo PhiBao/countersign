@@ -7,7 +7,7 @@
 //! One worktree is used for both runs so cargo sees one path and cannot reuse
 //! a stale test binary from the other revision.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use chrono::Utc;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -344,4 +344,24 @@ pub fn receipt_id() -> String {
 
 pub fn now() -> String {
     Utc::now().to_rfc3339()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::valid_branch;
+
+    #[test]
+    fn accepts_normal_branch_names() {
+        assert!(valid_branch("fix/half-cent-1a2b3c"));
+        assert!(valid_branch("hotfix/naive-rounding"));
+    }
+
+    #[test]
+    fn rejects_dangerous_names() {
+        assert!(!valid_branch(""));
+        assert!(!valid_branch("-rf"));
+        assert!(!valid_branch("a..b"));
+        assert!(!valid_branch("fix branch"));
+        assert!(!valid_branch("fix;rm"));
+    }
 }
