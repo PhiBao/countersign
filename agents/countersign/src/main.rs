@@ -1,3 +1,4 @@
+mod api;
 mod config;
 mod fixer;
 mod land;
@@ -7,12 +8,13 @@ mod switch;
 mod verifier;
 mod verify;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::sync::Arc;
 use tracing_subscriber::EnvFilter;
 
 use crate::config::{Config, Role};
 use crate::fixer::Fixer;
+use crate::ledger::Ledger;
 use crate::switch::SwitchClient;
 use crate::verifier::Verifier;
 
@@ -50,7 +52,18 @@ async fn main() -> Result<()> {
 
     match config.role {
         Role::Verifier => {
-            let handler = Arc::new(Verifier::new(config, client.clone())?);
+            let ledger = Ledger::open(&config.ledger_path)?;
+            if let Ok(port) = std::env::var("COUNTERSIGN_API_PORT") {
+                let port: u16 = port.parse().context("COUNTERSIGN_API_PORT must be a port")?;
+                let viewer_dir = config.repo.join("viewer/dist");
+                let ledger = ledger.clone();
+                tokio::spawn(async move {
+                    if let Err(error) = api::serve(ledger, port, viewer_dir).await {
+                        tracing::error!("ledger viewer failed: {error:#}");
+                    }
+                });
+            }
+            let handler = Arc::new(Verifier::new(config, client.clone(), ledger)?);
             client.run(handler).await
         }
         Role::Fixer => {

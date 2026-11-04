@@ -121,32 +121,17 @@ async fn land_local(config: &Config, receipt: &Receipt, countersigner: &str) -> 
     let root_string = root.to_string_lossy().to_string();
     let landed = "countersign/landed";
 
-    let exists = run(
-        "git",
-        &["rev-parse".to_string(), "--verify".to_string(), landed.to_string()],
-        &config.repo,
-        &[],
-        Duration::from_secs(30),
-    )
-    .await?;
-
-    let args = if exists.success {
-        vec![
-            "worktree".to_string(),
-            "add".to_string(),
-            root_string.clone(),
-            landed.to_string(),
-        ]
-    } else {
-        vec![
-            "worktree".to_string(),
-            "add".to_string(),
-            "-b".to_string(),
-            landed.to_string(),
-            root_string.clone(),
-            config.base_ref.clone(),
-        ]
-    };
+    // The landed branch is a proof artifact for the last countersigned change,
+    // not an integration branch: reset it to the base revision so a second
+    // landing cannot conflict with the first.
+    let args = vec![
+        "worktree".to_string(),
+        "add".to_string(),
+        "-B".to_string(),
+        landed.to_string(),
+        root_string.clone(),
+        config.base_ref.clone(),
+    ];
     let added = run("git", &args, &config.repo, &[], Duration::from_secs(60)).await?;
     if !added.success {
         bail!("could not open the landing worktree: {}", added.tail(600));
