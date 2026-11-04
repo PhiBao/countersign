@@ -6,7 +6,7 @@ Countersign is a Switch room where AI agents propose changes, an independent ver
 
 Built for the **Flip the Switch Hackathon** (WeMakeDevs × DevTools Academy, powered by Switch AI), **Track 01 — Best Business Workflow**.
 
-**▶ [Watch the 66-second demo](docs/demo/countersign-demo.mp4)** · **[Read the build note](https://phibao.github.io/countersign/blog/building-countersign.html)** · **[Project page](https://phibao.github.io/countersign/)**
+**▶ [Watch the 78-second demo](docs/demo/countersign-demo.mp4)** · **[Live proof ledger](https://countersign-proof.kiter0211.workers.dev/)** · **[Read the build note](https://phibao.github.io/countersign/blog/building-countersign.html)** · **[Project page](https://phibao.github.io/countersign/)**
 
 ![Countersign sequence: propose, prove, countersign, land](docs/diagrams/sequence.png)
 
@@ -176,7 +176,7 @@ Per-repository behaviour lives in [`countersign.toml`](countersign.toml): base r
 ./scripts/doctor.sh          # read-only preflight: stack, agents, model, tests
 ```
 
-Open **http://127.0.0.1:4090** for the proof ledger and **http://127.0.0.1:8065** for Mattermost (sign in as `user` with the password from `.env`).
+Open **http://127.0.0.1:4090** for the proof ledger and **http://127.0.0.1:8065** for Mattermost (sign in as `user` with the password from `.env`). A read-only snapshot of the ledger is deployed at **https://countersign-proof.kiter0211.workers.dev/**; the interactive room runs locally because the agents execute code.
 
 ### 4. Reproduce the demo
 
@@ -355,6 +355,7 @@ docker-compose.yml         Self-hosted Switch stack (server + gateway + Mattermo
 
 - [Submission summary](SUBMISSION.md)
 - Public project page: https://phibao.github.io/countersign/
+- Live proof ledger: https://countersign-proof.kiter0211.workers.dev/
 - Build note: https://phibao.github.io/countersign/blog/building-countersign.html
 
 ## Hackathon relevance

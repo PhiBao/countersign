@@ -241,6 +241,10 @@ function ReceiptSheet({ receipt, index }: { receipt: Receipt; index: number }) {
   );
 }
 
+const RECEIPTS_URL =
+  (import.meta.env.VITE_RECEIPTS_URL as string | undefined) || "/api/receipts";
+const STATIC_LEDGER = RECEIPTS_URL.endsWith(".json");
+
 export default function App() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [status, setStatus] = useState<"loading" | "live" | "offline">(
@@ -252,7 +256,7 @@ export default function App() {
     let cancelled = false;
     async function load() {
       try {
-        const response = await fetch("/api/receipts", { cache: "no-store" });
+        const response = await fetch(RECEIPTS_URL, { cache: "no-store" });
         if (!response.ok) throw new Error(String(response.status));
         const data = (await response.json()) as Receipt[];
         if (cancelled) return;
@@ -295,7 +299,7 @@ export default function App() {
           <span className={`dot dot-${status}`} aria-hidden="true" />
           <span className="mono status-text">
             {status === "live"
-              ? `ledger live · ${updated}`
+              ? `${STATIC_LEDGER ? "ledger snapshot" : "ledger live"} · ${updated}`
               : status === "offline"
                 ? "ledger unreachable"
                 : "connecting"}

@@ -17,6 +17,7 @@ A Switch room where AI agents propose changes, an independent verifier proves or
 | Repository | https://github.com/PhiBao/countersign |
 | Demo video (66s) | [docs/demo/countersign-demo.mp4](docs/demo/countersign-demo.mp4) · https://phibao.github.io/countersign/demo/countersign-demo.mp4 |
 | Project page | https://phibao.github.io/countersign/ |
+| Live proof ledger | https://countersign-proof.kiter0211.workers.dev/ |
 | Build note (Best Blog) | https://phibao.github.io/countersign/blog/building-countersign.html |
 | Live proof | https://github.com/PhiBao/countersign/pull/7 |
 
@@ -88,6 +89,8 @@ Coding agents now open more than 40% of GitHub's pull requests, but review has n
 **Demo video:** https://phibao.github.io/countersign/demo/countersign-demo.mp4
 
 **README:** https://github.com/PhiBao/countersign#readme
+
+**Live proof ledger:** https://countersign-proof.kiter0211.workers.dev/
 
 **Blog:** https://phibao.github.io/countersign/blog/building-countersign.html
 

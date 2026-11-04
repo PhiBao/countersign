@@ -8,3 +8,8 @@ node_modules/
 .worktrees/
 .DS_Store
 *.log
+
+viewer/dist-static/
+
+.wrangler/
+*.tsbuildinfo
