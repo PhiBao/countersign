@@ -53,13 +53,14 @@ async fn land_pr(config: &Config, receipt: &Receipt, countersigner: &str) -> Res
         }
     }
 
+    // Push the exact commit that was verified, not whatever the branch name
+    // points at now. A moved branch makes this a non-fast-forward and fails.
     let push = run(
         "git",
         &[
             "push".to_string(),
-            "-u".to_string(),
             "origin".to_string(),
-            receipt.branch.clone(),
+            format!("{}:refs/heads/{}", receipt.commit_sha, receipt.branch),
         ],
         &config.repo,
         &[],
@@ -146,7 +147,7 @@ async fn land_local(config: &Config, receipt: &Receipt, countersigner: &str) -> 
         &[
             "merge".to_string(),
             "--no-ff".to_string(),
-            receipt.branch.clone(),
+            receipt.commit_sha.clone(),
             "-m".to_string(),
             message,
         ],
@@ -204,7 +205,8 @@ fn pr_body(receipt: &Receipt, countersigner: &str) -> String {
          | Branch | `{branch}` |\n\
          | Commit | `{sha}` |\n\
          | Changed files | {files} |\n\
-         | Countersigned by | {countersigner} |\n\n\
+         | Countersigned by | {countersigner} |\n\
+         | Diffstat | {diffstat} |\n\n\
          ### What the verifier ran\n\n\
          The reported failure was reproduced on `main`, then the full suite was run \
          on the branch in a clean worktree. No model sits in the verification path, \
@@ -223,6 +225,11 @@ fn pr_body(receipt: &Receipt, countersigner: &str) -> String {
             .collect::<Vec<_>>()
             .join(", "),
         countersigner = countersigner,
+        diffstat = if receipt.diffstat.is_empty() {
+            "(no diffstat)"
+        } else {
+            &receipt.diffstat
+        },
         suite = receipt.suite_output.trim(),
     )
 }

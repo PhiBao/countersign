@@ -34,7 +34,6 @@ pub struct SwitchClient {
 #[derive(Debug, Clone)]
 pub struct IncomingMessage {
     pub room_id: String,
-    pub sender: String,
     pub sender_name: String,
     pub body: String,
 }
@@ -299,11 +298,6 @@ impl SwitchClient {
                     let message = IncomingMessage {
                         room_id: data
                             .get("room_id")
-                            .and_then(Value::as_str)
-                            .unwrap_or_default()
-                            .to_string(),
-                        sender: payload
-                            .get("sender")
                             .and_then(Value::as_str)
                             .unwrap_or_default()
                             .to_string(),

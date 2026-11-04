@@ -2,19 +2,20 @@
 //! room.
 //!
 //! It proposes work on its own branch in its own checkout. It cannot land
-//! anything: that is the verifier's and a person's job. A separate clone is
-//! used rather than a worktree because coding agents resolve project roots in
-//! their own ways; a clone has no shared git directory to fall back into.
+//! anything: that is the verifier's and a person's job. The agent works in a
+//! plain copy with no `.git`, and the harness publishes the result through a
+//! worktree the agent never sees.
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info, warn};
 
 use crate::config::{Config, FixerProvider};
+use crate::ledger::Ledger;
 use crate::process::run;
 use crate::switch::{strip_mention, Handler, IncomingMessage, SwitchClient};
 
@@ -23,6 +24,12 @@ pub struct Fixer {
     client: Arc<SwitchClient>,
     busy: tokio::sync::Mutex<()>,
     announced: AtomicBool,
+}
+
+struct Proposal {
+    branch: String,
+    sha: String,
+    files: Vec<String>,
 }
 
 impl Fixer {
@@ -35,7 +42,7 @@ impl Fixer {
         }
     }
 
-    fn prompt(&self, report: &str, branch: &str) -> String {
+    fn fix_prompt(&self, report: &str, branch: &str) -> String {
         format!(
             r#"You are the fixer in a team room called "checkout-incidents". You are working in the Rust crate `demo/orders` of a disposable checkout on branch `{branch}`.
 
@@ -46,91 +53,96 @@ A teammate reported:
 
 Rules:
 - Find the root cause, then fix it in `src/`. Do not modify tests. Do not modify anything outside `demo/orders`.
-- The regression test for this report is:
-    cargo test -p orders-demo --test checkout half_cent_charges_round_up
-- Run `cargo test -p orders-demo` until the whole suite passes.
+- Run the full test suite and make it pass. The reported failing test is part of it.
 - Do not commit, push, or open a pull request. The harness does that.
 - End your reply with a line `SUMMARY:` followed by two or three sentences: root cause, the change, and the test result.
 "#
         )
     }
 
-    async fn handle_fix(&self, message: &IncomingMessage, report: &str) -> Result<()> {
-        let _guard = match self.busy.try_lock() {
-            Ok(guard) => guard,
-            Err(_) => {
-                self.client
-                    .post_message(
-                        &message.room_id,
-                        "One change at a time — I'm still working on the previous one.",
-                    )
-                    .await?;
-                return Ok(());
-            }
-        };
+    fn revise_prompt(&self, receipt: &crate::ledger::Receipt, branch: &str) -> String {
+        format!(
+            r#"You are the fixer in a team room called "checkout-incidents". You are working in the Rust crate `demo/orders` of a disposable checkout on branch `{branch}`.
 
-        let id = &uuid::Uuid::new_v4().simple().to_string()[..6];
-        let slug = slugify(report);
-        let branch = format!("fix/{slug}-{id}");
-        let checkout = std::env::temp_dir().join(format!("countersign-fix-{id}"));
+An independent verifier rejected a previous proposal. Its receipt:
 
-        self.client
-            .post_message(
-                &message.room_id,
-                &format!(
-                    "On it. I'll work on `{branch}` in my own checkout and hand it to the verifier when the suite is green.\n\nI can't land it myself — that's the point."
-                ),
-            )
-            .await?;
+Reason: {reason}
 
-        // A plain copy, with no .git: coding agents resolve project roots in
-        // their own ways, and one that follows a git directory can wander back
-        // into the operator's checkout. Nothing the agent does here can touch
-        // the repository until the harness commits the result.
-        std::fs::create_dir_all(&checkout)?;
-        for entry in ["Cargo.toml", "Cargo.lock"] {
-            let source = self.config.repo.join(entry);
-            if source.exists() {
-                std::fs::copy(&source, checkout.join(entry))?;
-            }
+Failing output:
+---
+{output}
+---
+
+Rules:
+- Start from the current branch. The previous attempt is already applied.
+- Fix the failure. Do not weaken, delete, or edit the tests. Do not modify anything outside `demo/orders`.
+- Run the full test suite until it passes.
+- Do not commit, push, or open a pull request. The harness does that.
+- End your reply with a line `SUMMARY:` followed by two or three sentences: what the verifier caught, what you changed, and the test result.
+"#,
+            branch = branch,
+            reason = receipt
+                .reason
+                .clone()
+                .unwrap_or_else(|| "The suite failed.".to_string()),
+            output = tail(&receipt.suite_output, 6000),
+        )
+    }
+
+    /// Extract a plain copy of `reference` with no git directory, so the agent
+    /// cannot follow a git root back into the operator's checkout.
+    async fn checkout_at(&self, reference: &str, id: &str) -> Result<PathBuf> {
+        let dir = std::env::temp_dir().join(format!("countersign-fix-{id}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir)?;
+        let archive = std::env::temp_dir().join(format!("countersign-fix-{id}.tar"));
+        let archived = run(
+            "git",
+            &[
+                "archive".to_string(),
+                "--format=tar".to_string(),
+                format!("--output={}", archive.to_string_lossy()),
+                reference.to_string(),
+            ],
+            &self.config.repo,
+            &[],
+            Duration::from_secs(120),
+        )
+        .await?;
+        if !archived.success {
+            let _ = std::fs::remove_dir_all(&dir);
+            bail!("git archive {reference} failed: {}", archived.tail(600));
         }
-        for dir in ["demo", "agents"] {
-            let source = self.config.repo.join(dir);
-            if source.exists() {
-                let copied = run(
-                    "cp",
-                    &[
-                        "-a".to_string(),
-                        source.to_string_lossy().to_string(),
-                        checkout.to_string_lossy().to_string(),
-                    ],
-                    &self.config.repo,
-                    &[],
-                    Duration::from_secs(60),
-                )
-                .await?;
-                if !copied.success {
-                    let _ = std::fs::remove_dir_all(&checkout);
-                    self.client
-                        .post_message(
-                            &message.room_id,
-                            &format!("I couldn't create my checkout: {}", copied.tail(600)),
-                        )
-                        .await?;
-                    return Ok(());
-                }
-            }
+        let extracted = run(
+            "tar",
+            &[
+                "-xf".to_string(),
+                archive.to_string_lossy().to_string(),
+                "-C".to_string(),
+                dir.to_string_lossy().to_string(),
+            ],
+            &self.config.repo,
+            &[],
+            Duration::from_secs(120),
+        )
+        .await?;
+        let _ = std::fs::remove_file(&archive);
+        if !extracted.success {
+            let _ = std::fs::remove_dir_all(&dir);
+            bail!("tar failed: {}", extracted.tail(600));
         }
+        Ok(dir)
+    }
 
+    async fn run_agent(&self, checkout: &Path, prompt: String) -> Result<crate::process::CommandOutput> {
         let crate_dir = checkout.join("demo/orders");
         let summary_path = self
             .config
             .repo
             .join(".countersign")
-            .join(format!("{id}.summary.txt"));
-        let prompt = self.prompt(report, &branch);
+            .join(format!("{}.summary.txt", uuid::Uuid::new_v4()));
         let provider = self.config.fixer_provider;
-        info!("running {provider:?} for branch {branch}");
+        info!("running {provider:?} in {}", crate_dir.display());
 
         let (program, args) = match provider {
             FixerProvider::OpenCode => (
@@ -162,108 +174,51 @@ Rules:
                 ],
             ),
         };
+        let agent_envs: Vec<(&str, String)> =
+            vec![("PWD", crate_dir.to_string_lossy().to_string())];
+        let output = run(program, &args, &crate_dir, &agent_envs, Duration::from_secs(600)).await;
+        let _ = std::fs::remove_file(summary_path);
+        output
+    }
 
-        let agent_envs: Vec<(&str, String)> = vec![(
-            "PWD",
-            crate_dir.to_string_lossy().to_string(),
-        )];
-        let agent = run(program, &args, &crate_dir, &agent_envs, Duration::from_secs(600)).await;
-
-        let agent = match agent {
-            Ok(output) => output,
-            Err(error) => {
-                let _ = std::fs::remove_dir_all(&checkout);
-                self.client
-                    .post_message(&message.room_id, &format!("The coding agent failed to run: {error:#}"))
-                    .await?;
-                return Ok(());
-            }
-        };
-        info!("agent output tail: {}", agent.tail(600));
-
-        if !agent.success {
-            let excerpt = agent.tail(900);
-            let _ = std::fs::remove_dir_all(&checkout);
-            self.client
-                .post_message(
-                    &message.room_id,
-                    &format!("The fix run failed; no branch was proposed.\n\n```text\n{excerpt}\n```"),
-                )
-                .await?;
-            return Ok(());
-        }
-
-        let status = run(
-            "diff",
-            &[
-                "-rq".to_string(),
-                "--exclude".to_string(),
-                "target".to_string(),
-                "--exclude".to_string(),
-                ".opencode".to_string(),
-                "--exclude".to_string(),
-                ".codex".to_string(),
-                self.config
-                    .repo
-                    .join("demo/orders")
-                    .to_string_lossy()
-                    .to_string(),
-                crate_dir.to_string_lossy().to_string(),
-            ],
-            &self.config.repo,
-            &[],
-            Duration::from_secs(30),
-        )
-        .await?;
-        if status.success {
-            let _ = std::fs::remove_dir_all(&checkout);
-            self.client
-                .post_message(
-                    &message.room_id,
-                    "I couldn't find a change to propose. Nothing was committed.",
-                )
-                .await?;
-            return Ok(());
-        }
-
-        // Publish the agent's work through a real git worktree. The agent
-        // never had access to this one.
+    /// Publish the agent's crate through a git worktree. Returns `None` when
+    /// the agent changed nothing.
+    async fn publish(
+        &self,
+        base_ref: &str,
+        branch: &str,
+        checkout: &Path,
+        summary: &str,
+        commit_message: &str,
+    ) -> Result<Option<Proposal>> {
+        let id = &uuid::Uuid::new_v4().simple().to_string()[..6];
         let wt = self
             .config
             .repo
             .join(".worktrees")
             .join(format!("commit-{id}"));
         let wt_string = wt.to_string_lossy().to_string();
-        let added_branch = run(
+        let added = run(
             "git",
             &[
                 "worktree".to_string(),
                 "add".to_string(),
                 "-b".to_string(),
-                branch.clone(),
+                branch.to_string(),
                 wt_string.clone(),
-                self.config.base_ref.clone(),
+                base_ref.to_string(),
             ],
             &self.config.repo,
             &[],
             Duration::from_secs(60),
         )
         .await?;
-        if !added_branch.success {
-            let _ = std::fs::remove_dir_all(&checkout);
-            self.client
-                .post_message(
-                    &message.room_id,
-                    &format!("I couldn't create the branch: {}", added_branch.tail(600)),
-                )
-                .await?;
-            return Ok(());
+        if !added.success {
+            bail!("could not open a branch worktree: {}", added.tail(600));
         }
 
-        // Replace the whole crate with the agent's version so additions and
-        // deletions both survive, then drop anything that is not source.
-        let target_crate = wt.join("demo/orders");
-        let _ = std::fs::remove_dir_all(&target_crate);
+        let target = wt.join("demo/orders");
+        let _ = std::fs::remove_dir_all(&target);
         let synced = run(
             "rsync",
             &[
@@ -274,8 +229,8 @@ Rules:
                 ".opencode".to_string(),
                 "--exclude".to_string(),
                 ".codex".to_string(),
-                format!("{}/", crate_dir.to_string_lossy()),
-                format!("{}/", target_crate.to_string_lossy()),
+                format!("{}/", checkout.join("demo/orders").to_string_lossy()),
+                format!("{}/", target.to_string_lossy()),
             ],
             &self.config.repo,
             &[],
@@ -284,14 +239,25 @@ Rules:
         .await?;
         if !synced.success {
             let _ = cleanup_worktree(&self.config.repo, &wt_string).await;
-            let _ = std::fs::remove_dir_all(&checkout);
-            self.client
-                .post_message(
-                    &message.room_id,
-                    &format!("I couldn't assemble the branch: {}", synced.tail(600)),
-                )
-                .await?;
-            return Ok(());
+            bail!("could not assemble the branch: {}", synced.tail(600));
+        }
+
+        let status = run(
+            "git",
+            &[
+                "status".to_string(),
+                "--porcelain".to_string(),
+                "--".to_string(),
+                "demo/orders".to_string(),
+            ],
+            &wt,
+            &[],
+            Duration::from_secs(30),
+        )
+        .await?;
+        if status.combined.trim().is_empty() {
+            let _ = cleanup_worktree(&self.config.repo, &wt_string).await;
+            return Ok(None);
         }
 
         let added_files = run(
@@ -304,13 +270,15 @@ Rules:
         .await?;
         if !added_files.success {
             let _ = cleanup_worktree(&self.config.repo, &wt_string).await;
-            let _ = std::fs::remove_dir_all(&checkout);
             bail!("git add failed: {}", added_files.tail(500));
         }
-        let commit_message = format!("fix: {slug}\n\nProposed by countersign-fixer; not yet verified.");
         let committed = run(
             "git",
-            &["commit".to_string(), "-m".to_string(), commit_message],
+            &[
+                "commit".to_string(),
+                "-m".to_string(),
+                format!("{commit_message}\n\nProposed by countersign-fixer; not yet verified.\n\n{summary}"),
+            ],
             &wt,
             &[],
             Duration::from_secs(30),
@@ -318,7 +286,6 @@ Rules:
         .await?;
         if !committed.success {
             let _ = cleanup_worktree(&self.config.repo, &wt_string).await;
-            let _ = std::fs::remove_dir_all(&checkout);
             bail!("git commit failed: {}", committed.tail(700));
         }
 
@@ -330,13 +297,12 @@ Rules:
             Duration::from_secs(30),
         )
         .await?;
-        let sha = sha.combined.trim().to_string();
         let files = run(
             "git",
             &[
                 "diff".to_string(),
                 "--name-only".to_string(),
-                format!("{}...HEAD", self.config.base_ref),
+                format!("{base_ref}...HEAD"),
             ],
             &wt,
             &[],
@@ -345,36 +311,298 @@ Rules:
         .await?;
         let _ = cleanup_worktree(&self.config.repo, &wt_string).await;
 
-        let raw_summary = std::fs::read_to_string(&summary_path)
-            .unwrap_or_else(|_| extract_text(&agent.combined));
-        let summary = raw_summary
-            .split("SUMMARY:")
-            .last()
-            .unwrap_or(&raw_summary)
-            .trim()
-            .to_string();
-        let _ = std::fs::remove_dir_all(&checkout);
-        let _ = std::fs::remove_file(summary_path);
-
-        let message_out = format!(
-            "**Proposed fix · `{branch}`**\nCommit `{}` · files: {}\n\n{}",
-            &sha[..sha.len().min(10)],
-            files
+        Ok(Some(Proposal {
+            branch: branch.to_string(),
+            sha: sha.combined.trim().to_string(),
+            files: files
                 .combined
                 .lines()
-                .map(|line| format!("`{}`", line.trim()))
-                .collect::<Vec<_>>()
-                .join(", "),
-            truncate(&summary, 1600)
-        );
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .map(str::to_string)
+                .collect(),
+        }))
+    }
+
+    async fn handle_fix(&self, message: &IncomingMessage, report: &str) -> Result<()> {
+        let _guard = match self.busy.try_lock() {
+            Ok(guard) => guard,
+            Err(_) => {
+                self.client
+                    .post_message(
+                        &message.room_id,
+                        "One change at a time — I'm still working on the previous one.",
+                    )
+                    .await?;
+                return Ok(());
+            }
+        };
+
+        let id = &uuid::Uuid::new_v4().simple().to_string()[..6];
+        let slug = slugify(report);
+        let branch = format!("fix/{slug}-{id}");
+
         self.client
-            .post_message(&message.room_id, &message_out)
+            .post_message(
+                &message.room_id,
+                &format!(
+                    "On it. I'll work on `{branch}` in my own checkout and hand it to the verifier when the suite is green.\n\nI can't land it myself — that's the point."
+                ),
+            )
             .await?;
-        // The handoff is a separate, explicit message so the room shows who
-        // asked whom, and so the verifier receives a clean command.
+
+        let checkout = match self.checkout_at(&self.config.base_ref, id).await {
+            Ok(checkout) => checkout,
+            Err(error) => {
+                self.client
+                    .post_message(
+                        &message.room_id,
+                        &format!("I couldn't create my checkout: {error:#}"),
+                    )
+                    .await?;
+                return Ok(());
+            }
+        };
+
+        let prompt = self.fix_prompt(report, &branch);
+        let output = match self.run_agent(&checkout, prompt).await {
+            Ok(output) => output,
+            Err(error) => {
+                let _ = std::fs::remove_dir_all(&checkout);
+                self.client
+                    .post_message(
+                        &message.room_id,
+                        &format!("The coding agent failed to run: {error:#}"),
+                    )
+                    .await?;
+                return Ok(());
+            }
+        };
+        if !output.success {
+            let excerpt = output.tail(900);
+            let _ = std::fs::remove_dir_all(&checkout);
+            self.client
+                .post_message(
+                    &message.room_id,
+                    &format!("The fix run failed; no branch was proposed.\n\n```text\n{excerpt}\n```"),
+                )
+                .await?;
+            return Ok(());
+        }
+
+        let summary = summary_of(&output);
+        let published = self
+            .publish(
+                &self.config.base_ref,
+                &branch,
+                &checkout,
+                &summary,
+                &format!("fix: {slug}"),
+            )
+            .await;
+        let _ = std::fs::remove_dir_all(&checkout);
+
+        match published {
+            Ok(Some(proposal)) => {
+                self.post_proposal(message, &proposal, &summary, None).await?;
+            }
+            Ok(None) => {
+                self.client
+                    .post_message(
+                        &message.room_id,
+                        "I couldn't find a change to propose. Nothing was committed.",
+                    )
+                    .await?;
+            }
+            Err(error) => {
+                self.client
+                    .post_message(
+                        &message.room_id,
+                        &format!("I couldn't publish the proposal: {error:#}"),
+                    )
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_revise(&self, message: &IncomingMessage, receipt_id: &str) -> Result<()> {
+        let _guard = match self.busy.try_lock() {
+            Ok(guard) => guard,
+            Err(_) => {
+                self.client
+                    .post_message(
+                        &message.room_id,
+                        "One change at a time — I'm still working on the previous one.",
+                    )
+                    .await?;
+                return Ok(());
+            }
+        };
+
+        let ledger = Ledger::open(&self.config.ledger_path)?;
+        let Some(receipt) = ledger.get(receipt_id)? else {
+            self.client
+                .post_message(
+                    &message.room_id,
+                    &format!("I can't find a receipt `{receipt_id}` to revise."),
+                )
+                .await?;
+            return Ok(());
+        };
+        if receipt.verdict == crate::ledger::Verdict::Pass {
+            self.client
+                .post_message(
+                    &message.room_id,
+                    &format!("`{receipt_id}` already passed. There is nothing to revise."),
+                )
+                .await?;
+            return Ok(());
+        }
+        if receipt.attempt >= self.config.max_attempts {
+            self.client
+                .post_message(
+                    &message.room_id,
+                    &format!(
+                        "`{receipt_id}` is at attempt {}/{}. I'm not starting another loop; a person should decide.",
+                        receipt.attempt, self.config.max_attempts
+                    ),
+                )
+                .await?;
+            return Ok(());
+        }
+
+        let id = &uuid::Uuid::new_v4().simple().to_string()[..6];
+        let slug = slugify(&receipt.branch.replace('/', " "));
+        let branch = format!("retry/{slug}-{id}");
         self.client
-            .post_message(&message.room_id, &format!("@verifier verify {branch}"))
+            .post_message(
+                &message.room_id,
+                &format!(
+                    "Revising from `{}`: attempt {}/{}. I'll start from `{}` and hand the new branch back to the verifier.",
+                    receipt.id,
+                    receipt.attempt + 1,
+                    self.config.max_attempts,
+                    receipt.branch
+                ),
+            )
             .await?;
+
+        let checkout = match self.checkout_at(&receipt.branch, id).await {
+            Ok(checkout) => checkout,
+            Err(error) => {
+                self.client
+                    .post_message(
+                        &message.room_id,
+                        &format!("I couldn't check out the failed branch: {error:#}"),
+                    )
+                    .await?;
+                return Ok(());
+            }
+        };
+
+        let prompt = self.revise_prompt(&receipt, &branch);
+        let output = match self.run_agent(&checkout, prompt).await {
+            Ok(output) => output,
+            Err(error) => {
+                let _ = std::fs::remove_dir_all(&checkout);
+                self.client
+                    .post_message(
+                        &message.room_id,
+                        &format!("The coding agent failed to run: {error:#}"),
+                    )
+                    .await?;
+                return Ok(());
+            }
+        };
+        if !output.success {
+            let excerpt = output.tail(900);
+            let _ = std::fs::remove_dir_all(&checkout);
+            self.client
+                .post_message(
+                    &message.room_id,
+                    &format!("The revision failed; no branch was proposed.\n\n```text\n{excerpt}\n```"),
+                )
+                .await?;
+            return Ok(());
+        }
+
+        let summary = summary_of(&output);
+        let published = self
+            .publish(
+                &receipt.branch,
+                &branch,
+                &checkout,
+                &summary,
+                &format!("fix: revise {}", receipt.id),
+            )
+            .await;
+        let _ = std::fs::remove_dir_all(&checkout);
+
+        match published {
+            Ok(Some(proposal)) => {
+                self.post_proposal(message, &proposal, &summary, Some(&receipt.id))
+                    .await?;
+            }
+            Ok(None) => {
+                self.client
+                    .post_message(
+                        &message.room_id,
+                        &format!(
+                            "I couldn't find a change beyond `{}`. The revision is empty.",
+                            receipt.branch
+                        ),
+                    )
+                    .await?;
+            }
+            Err(error) => {
+                self.client
+                    .post_message(
+                        &message.room_id,
+                        &format!("I couldn't publish the revision: {error:#}"),
+                    )
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn post_proposal(
+        &self,
+        message: &IncomingMessage,
+        proposal: &Proposal,
+        summary: &str,
+        supersedes: Option<&str>,
+    ) -> Result<()> {
+        let chain = supersedes
+            .map(|parent| format!("\nSupersedes `{parent}`."))
+            .unwrap_or_default();
+        self.client
+            .post_message(
+                &message.room_id,
+                &format!(
+                    "**Proposed fix · `{}`**\nCommit `{}` · files: {}{}\n\n{}",
+                    proposal.branch,
+                    &proposal.sha[..proposal.sha.len().min(10)],
+                    proposal
+                        .files
+                        .iter()
+                        .map(|file| format!("`{file}`"))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    chain,
+                    truncate(summary, 1600)
+                ),
+            )
+            .await?;
+        let handoff = match supersedes {
+            Some(parent) => format!(
+                "@verifier verify {} supersedes {}",
+                proposal.branch, parent
+            ),
+            None => format!("@verifier verify {}", proposal.branch),
+        };
+        self.client.post_message(&message.room_id, &handoff).await?;
         Ok(())
     }
 }
@@ -415,6 +643,24 @@ impl Handler for Fixer {
             }
         }
         let body = strip_mention(&message.body);
+        let lower = body.to_lowercase();
+
+        if lower.starts_with("revise") {
+            let mut parts = body.split_whitespace();
+            parts.next();
+            let id = parts.next().unwrap_or("").trim_matches('`');
+            if id.is_empty() {
+                self.client
+                    .post_message(
+                        &message.room_id,
+                        "Which receipt? `@fixer revise <receipt>`",
+                    )
+                    .await?;
+                return Ok(());
+            }
+            return self.handle_revise(&message, id).await;
+        }
+
         let Some(rest) = body.trim().strip_prefix("fix") else {
             self.client
                 .post_message(
@@ -453,6 +699,15 @@ async fn cleanup_worktree(repo: &Path, worktree: &str) -> Result<()> {
     )
     .await;
     Ok(())
+}
+
+fn summary_of(output: &crate::process::CommandOutput) -> String {
+    let raw = extract_text(&output.combined);
+    raw.split("SUMMARY:")
+        .last()
+        .unwrap_or(&raw)
+        .trim()
+        .to_string()
 }
 
 fn slugify(text: &str) -> String {
@@ -508,6 +763,18 @@ fn extract_text(output: &str) -> String {
     }
 }
 
+fn tail(text: &str, limit: usize) -> String {
+    if text.len() <= limit {
+        return text.to_string();
+    }
+    let start = text
+        .char_indices()
+        .find(|(index, _)| *index >= text.len() - limit)
+        .map(|(index, _)| index)
+        .unwrap_or(0);
+    text[start..].to_string()
+}
+
 fn truncate(text: &str, limit: usize) -> String {
     if text.len() <= limit {
         return text.to_string();
@@ -520,3 +787,13 @@ fn truncate(text: &str, limit: usize) -> String {
     format!("…{}", &text[start..])
 }
 
+#[cfg(test)]
+mod tests {
+    use super::slugify;
+
+    #[test]
+    fn slugs_are_branch_safe() {
+        assert_eq!(slugify("refunds are still off!"), "refunds-are-still");
+        assert_eq!(slugify("!!!"), "checkout-incident");
+    }
+}

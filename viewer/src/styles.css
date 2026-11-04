@@ -553,3 +553,116 @@ a.landed:hover {
     animation: none;
   }
 }
+
+/* ── attempt chain, tabs, and diff ───────────────────────── */
+
+.chain {
+  margin: 0.45rem 0 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.diffstat {
+  margin: 0.8rem 0 0;
+  font-size: 0.68rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--rule);
+}
+
+.tab {
+  background: transparent;
+  border: 1px solid var(--rule);
+  padding: 0.28rem 0.5rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tab:hover:not(:disabled),
+.tab:focus-visible:not(:disabled) {
+  border-color: var(--ink);
+  color: var(--ink);
+  outline: none;
+}
+
+.tab-active {
+  border-color: var(--ink);
+  background: var(--paper-deep);
+  color: var(--ink);
+}
+
+.tab:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.tabs .evidence-toggle {
+  margin-left: auto;
+}
+
+.evidence-pre {
+  margin: 0.7rem 0 0;
+  padding: 0.9rem 1rem;
+  max-height: 260px;
+  overflow: auto;
+  background: var(--ink);
+  color: #e9e3d3;
+  border-left: 3px solid var(--orange);
+  font-size: 0.7rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff-block {
+  margin-top: 1rem;
+}
+
+.diff {
+  margin: 0.7rem 0 0;
+  padding: 0.85rem 1rem;
+  max-height: 340px;
+  overflow: auto;
+  background: var(--ink);
+  color: #d8d1c1;
+  border-left: 3px solid var(--orange);
+  font-size: 0.66rem;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.diff-add {
+  color: #9ed3ad;
+}
+
+.diff-del {
+  color: #e6a092;
+}
+
+.diff-hunk {
+  color: #b9b1a2;
+}
+
+.pr-state {
+  display: inline-block;
+  margin-left: 0.55rem;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--green);
+  font-size: 0.52rem;
+  letter-spacing: 0.12em;
+  vertical-align: middle;
+  color: var(--green);
+}

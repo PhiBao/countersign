@@ -1,15 +1,18 @@
 //! The verifier: independent, deterministic, and the only role that can issue
 //! a receipt a person may countersign.
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use async_trait::async_trait;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::warn;
 
-use crate::config::Config;
+use crate::config::{Config, PrMode};
 use crate::land;
 use crate::ledger::{Ledger, Receipt, Verdict};
+use crate::process::run;
 use crate::switch::{strip_mention, Handler, IncomingMessage, SwitchClient};
 use crate::verify::{self, receipt_id};
 
@@ -32,7 +35,12 @@ impl Verifier {
         })
     }
 
-    async fn handle_verify(&self, message: &IncomingMessage, branch: &str) -> Result<()> {
+    async fn handle_verify(
+        &self,
+        message: &IncomingMessage,
+        branch: &str,
+        supersedes: Option<&str>,
+    ) -> Result<()> {
         if branch.is_empty() {
             self.client
                 .post_message(
@@ -54,6 +62,8 @@ impl Verifier {
                 return Ok(());
             }
         };
+
+        let (attempt, supersedes) = self.attempt_for(branch, supersedes);
 
         self.client
             .post_message(
@@ -84,21 +94,80 @@ impl Verifier {
             room_id: message.room_id.clone(),
             branch: branch.to_string(),
             commit_sha: outcome.commit_sha.clone(),
+            base_sha: outcome.base_sha.clone(),
             verdict: outcome.verdict,
             reason: outcome.reason.clone(),
             changed_files: outcome.changed_files.clone(),
             base_output: outcome.base_output.clone(),
             suite_output: outcome.suite_output.clone(),
+            diffstat: outcome.diffstat.clone(),
+            diff: outcome.diff.clone(),
             duration_ms: outcome.duration_ms,
+            attempt,
+            supersedes: supersedes.clone(),
             created_at: verify::now(),
             countersigned_by: None,
             countersigned_at: None,
             landed_url: None,
+            pr_state: None,
         };
         self.ledger.insert(&receipt)?;
 
-        let text = format_receipt(&receipt, self.config.viewer_url.as_deref());
+        let text = format_receipt(
+            &receipt,
+            self.config.viewer_url.as_deref(),
+            !self.config.approvers.is_empty(),
+            &self.config.base_ref,
+        );
         self.client.post_message(&message.room_id, &text).await?;
+
+        if receipt.verdict == Verdict::Fail {
+            self.escalate_or_revise(&receipt).await?;
+        }
+        Ok(())
+    }
+
+    fn attempt_for(&self, branch: &str, supersedes: Option<&str>) -> (u8, Option<String>) {
+        if let Some(parent_id) = supersedes {
+            if let Ok(Some(parent)) = self.ledger.get(parent_id) {
+                return (
+                    parent.attempt.saturating_add(1).min(9),
+                    Some(parent.id),
+                );
+            }
+        }
+        (if branch.starts_with("retry/") { 2 } else { 1 }, None)
+    }
+
+    /// On a first failure, hand the receipt back to the fixer as a work order.
+    /// On the last allowed attempt, stop and escalate to a person.
+    async fn escalate_or_revise(&self, receipt: &Receipt) -> Result<()> {
+        if receipt.verdict == Verdict::Pass {
+            return Ok(());
+        }
+        if receipt.attempt < self.config.max_attempts {
+            self.client
+                .post_message(
+                    &receipt.room_id,
+                    &format!(
+                        "@fixer revise {} — the receipt has the failing tests and the exact output. Attempt {}/{}.",
+                        receipt.id,
+                        receipt.attempt + 1,
+                        self.config.max_attempts
+                    ),
+                )
+                .await?;
+        } else {
+            self.client
+                .post_message(
+                    &receipt.room_id,
+                    &format!(
+                        "Attempt {}/{} failed. I'm not starting another agent loop; a person should decide what happens next.",
+                        receipt.attempt, self.config.max_attempts
+                    ),
+                )
+                .await?;
+        }
         Ok(())
     }
 
@@ -147,12 +216,6 @@ impl Verifier {
                 Vec::new()
             }
         };
-        tracing::info!(
-            sender = %message.sender,
-            sender_name = %message.sender_name,
-            participants = ?participants,
-            "countersign authorisation"
-        );
         // `sender` is the room's client id for the sender, while
         // `list_participants` reports Switch participant ids; they are
         // different namespaces. Resolve by name instead, and fail closed when
@@ -183,12 +246,85 @@ impl Verifier {
             return Ok(());
         }
 
+        if !self.config.is_approver(&message.sender_name) {
+            self.client
+                .post_message(
+                    &message.room_id,
+                    &format!(
+                        "`{}` is not an approver for this room. Approvers: {}.",
+                        message.sender_name,
+                        self.config.approvers.join(", ")
+                    ),
+                )
+                .await?;
+            return Ok(());
+        }
+
+        // The receipt is a claim about a specific commit on a specific base.
+        // Re-check both before any irreversible action.
+        let head = match rev(&self.config.repo, &receipt.branch).await {
+            Ok(sha) => sha,
+            Err(error) => {
+                self.client
+                    .post_message(
+                        &message.room_id,
+                        &format!("I can't resolve `{}`: {error:#}", receipt.branch),
+                    )
+                    .await?;
+                return Ok(());
+            }
+        };
+        if head != receipt.commit_sha {
+            self.client
+                .post_message(
+                    &message.room_id,
+                    &format!(
+                        "`{}` no longer points at the verified commit. The receipt is for `{}`, the branch is at `{}`. Run `@verifier verify {}` again.",
+                        receipt.branch,
+                        short(&receipt.commit_sha),
+                        short(&head),
+                        receipt.branch
+                    ),
+                )
+                .await?;
+            return Ok(());
+        }
+        let base = match rev(&self.config.repo, &self.config.base_ref).await {
+            Ok(sha) => sha,
+            Err(error) => {
+                self.client
+                    .post_message(
+                        &message.room_id,
+                        &format!(
+                            "I can't resolve the base `{}`: {error:#}",
+                            self.config.base_ref
+                        ),
+                    )
+                    .await?;
+                return Ok(());
+            }
+        };
+        if !receipt.base_sha.is_empty() && base != receipt.base_sha {
+            self.client
+                .post_message(
+                    &message.room_id,
+                    &format!(
+                        "`{}` moved since this receipt was issued. Run `@verifier verify {}` again so the proof is against the current base.",
+                        self.config.base_ref, receipt.branch
+                    ),
+                )
+                .await?;
+            return Ok(());
+        }
+
         self.client
             .post_message(
                 &message.room_id,
                 &format!(
-                    "Countersigned by **{}**. Landing `{}` now.",
-                    message.sender_name, receipt.branch
+                    "Countersigned by **{}**. Landing `{}` at `{}`.",
+                    message.sender_name,
+                    receipt.branch,
+                    short(&receipt.commit_sha)
                 ),
             )
             .await?;
@@ -197,13 +333,18 @@ impl Verifier {
             Ok(where_it_landed) => {
                 self.ledger
                     .countersign(&id, &message.sender_name, Some(&where_it_landed))?;
+                let state = match self.config.pr_mode {
+                    PrMode::Gh => "OPEN",
+                    PrMode::Local => "LOCAL",
+                };
+                self.ledger.set_pr_state(&id, state)?;
                 self.client
                     .post_message(
                         &message.room_id,
                         &format!(
                             "**LANDED · `{id}`**\n\n{where_it_landed}\n\nCountersigned by **{}** · commit `{}`.\n\nThe room keeps the whole record: who proposed, what was verified, who signed.",
                             message.sender_name,
-                            &receipt.commit_sha[..receipt.commit_sha.len().min(10)]
+                            short(&receipt.commit_sha)
                         ),
                     )
                     .await?;
@@ -237,9 +378,10 @@ impl Verifier {
                 Verdict::Fail => "❌ FAIL",
             };
             text.push_str(&format!(
-                "- `{}` {} · `{}` · {}\n",
+                "- `{}` {} · attempt {} · `{}` · {}\n",
                 receipt.id,
                 mark,
+                receipt.attempt,
                 receipt.branch,
                 match &receipt.countersigned_by {
                     Some(by) => format!(
@@ -264,8 +406,8 @@ impl Verifier {
             .post_message(
                 room,
                 "**Verifier** — I check changes; I never write them.\n\n\
-                 `@verifier verify <branch>` — reproduce the report on `main`, run the suite on the branch, issue a receipt.\n\
-                 `@verifier countersign <receipt>` — a person signs a passing receipt; the change lands.\n\
+                 `@verifier verify <branch> [supersedes <receipt>]` — reproduce the report on the base, run the suite on the branch, issue a receipt.\n\
+                 `@verifier countersign <receipt>` — an approver signs a passing receipt; the verified commit lands.\n\
                  `@verifier ledger` — recent receipts.\n\n\
                  Agents cannot countersign.",
             )
@@ -317,10 +459,19 @@ impl Handler for Verifier {
             let id = body[offset..].trim();
             return self.handle_countersign(&message, id).await;
         }
-        if let Some(rest) = lower.strip_prefix("verify") {
-            let offset = body.len() - rest.len();
-            let branch = body[offset..].trim().trim_matches('`');
-            return self.handle_verify(&message, branch).await;
+        if lower.starts_with("verify") {
+            let mut parts = body.split_whitespace();
+            parts.next(); // "verify"
+            let branch = parts.next().unwrap_or("").trim_matches('`');
+            let mut supersedes = None;
+            if let Some(token) = parts.next() {
+                if token.eq_ignore_ascii_case("supersedes") {
+                    supersedes = parts.next().map(str::to_string);
+                }
+            }
+            return self
+                .handle_verify(&message, branch, supersedes.as_deref())
+                .await;
         }
         if lower.starts_with("ledger") {
             return self.handle_ledger(&message).await;
@@ -335,8 +486,36 @@ impl Handler for Verifier {
     }
 }
 
-fn format_receipt(receipt: &Receipt, viewer_url: Option<&str>) -> String {
-    let short_sha = &receipt.commit_sha[..receipt.commit_sha.len().min(10)];
+async fn rev(repo: &Path, reference: &str) -> Result<String> {
+    let output = run(
+        "git",
+        &[
+            "rev-parse".to_string(),
+            "--verify".to_string(),
+            reference.to_string(),
+        ],
+        repo,
+        &[],
+        Duration::from_secs(30),
+    )
+    .await?;
+    if !output.success {
+        bail!("git rev-parse {reference} failed");
+    }
+    Ok(output.combined.trim().to_string())
+}
+
+fn short(sha: &str) -> &str {
+    &sha[..sha.len().min(10)]
+}
+
+fn format_receipt(
+    receipt: &Receipt,
+    viewer_url: Option<&str>,
+    restricted: bool,
+    base_ref: &str,
+) -> String {
+    let short_sha = short(&receipt.commit_sha);
     let seconds = receipt.duration_ms as f64 / 1000.0;
     let files = receipt
         .changed_files
@@ -345,36 +524,57 @@ fn format_receipt(receipt: &Receipt, viewer_url: Option<&str>) -> String {
         .collect::<Vec<_>>()
         .join(", ");
     let ledger = viewer_url
-        .map(|url| format!("\n\nFull evidence: {url}"))
+        .map(|url| format!("\n\nFull evidence and diff: {url}"))
         .unwrap_or_default();
+    let chain = match (&receipt.supersedes, receipt.attempt) {
+        (Some(parent), attempt) => format!(" · attempt {attempt} · supersedes `{parent}`"),
+        (None, 1) => String::new(),
+        (None, attempt) => format!(" · attempt {attempt}"),
+    };
+    let diffstat = if receipt.diffstat.is_empty() {
+        String::new()
+    } else {
+        format!(" · {}", receipt.diffstat)
+    };
 
     match receipt.verdict {
         Verdict::Pass => {
             let summary = suite_summary(&receipt.suite_output);
+            let sign_line = if restricted {
+                format!("An approver can land it: **`@verifier countersign {id}`**. Agents cannot countersign.", id = receipt.id)
+            } else {
+                format!("A person can land it: **`@verifier countersign {id}`**. Agents cannot countersign.", id = receipt.id)
+            };
             format!(
-                "**✅ PASS · `{id}`** · `{branch}`\n\
-                 Commit `{short_sha}` · {files} · {seconds:.1}s\n\n\
-                 Reproduced the reported failure on `main`; the branch passed the full suite: **{summary}**.\n\n\
-                 A person can land it: **`@verifier countersign {id}`**. Agents cannot countersign.{ledger}",
+                "**✅ PASS · `{id}`** · `{branch}`{chain}\n\
+                 Commit `{short_sha}` · {files}{diffstat} · {seconds:.1}s\n\n\
+                 Reproduced the reported failure on `{base}`; the branch passed the full suite: **{summary}**.\n\n\
+                 {sign_line}{ledger}",
                 id = receipt.id,
                 branch = receipt.branch,
+                chain = chain,
                 short_sha = short_sha,
                 files = files,
+                diffstat = diffstat,
                 seconds = seconds,
+                base = base_ref,
                 summary = summary,
+                sign_line = sign_line,
                 ledger = ledger,
             )
         }
         Verdict::Fail => format!(
-            "**❌ FAIL · `{id}`** · `{branch}`\n\
-             Commit `{short_sha}` · {files} · {seconds:.1}s\n\n\
+            "**❌ FAIL · `{id}`** · `{branch}`{chain}\n\
+             Commit `{short_sha}` · {files}{diffstat} · {seconds:.1}s\n\n\
              {reason}\n\n\
              ```text\n{evidence}\n```\n\n\
              Nothing can land from a failed receipt.{ledger}",
             id = receipt.id,
             branch = receipt.branch,
+            chain = chain,
             short_sha = short_sha,
             files = files,
+            diffstat = diffstat,
             seconds = seconds,
             reason = receipt
                 .reason
@@ -440,7 +640,7 @@ fn truncate(text: &str, limit: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{count_before, suite_summary};
+    use super::{count_before, count_before as _, suite_summary};
 
     #[test]
     fn counts_a_single_test_result_line() {

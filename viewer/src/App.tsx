@@ -5,16 +5,22 @@ type Receipt = {
   room_id: string;
   branch: string;
   commit_sha: string;
+  base_sha: string;
   verdict: "PASS" | "FAIL";
   reason: string | null;
   changed_files: string[];
   base_output: string;
   suite_output: string;
+  diffstat: string;
+  diff: string;
   duration_ms: number;
+  attempt: number;
+  supersedes: string | null;
   created_at: string;
   countersigned_by: string | null;
   countersigned_at: string | null;
   landed_url: string | null;
+  pr_state: string | null;
 };
 
 function Mark() {
@@ -55,18 +61,35 @@ function stampTime(value: string) {
   });
 }
 
-function evidence(receipt: Receipt) {
-  const text =
-    receipt.verdict === "FAIL"
-      ? receipt.suite_output || receipt.base_output
-      : receipt.base_output;
-  return text.trim();
+function Diff({ text }: { text: string }) {
+  return (
+    <pre className="diff mono">
+      {text.split("\n").map((line, index) => {
+        let className = "";
+        if (line.startsWith("@@")) className = "diff-hunk";
+        else if (line.startsWith("+") && !line.startsWith("+++")) className = "diff-add";
+        else if (line.startsWith("-") && !line.startsWith("---")) className = "diff-del";
+        return (
+          <span key={index} className={className}>
+            {line}
+            {"\n"}
+          </span>
+        );
+      })}
+    </pre>
+  );
 }
 
 function ReceiptSheet({ receipt, index }: { receipt: Receipt; index: number }) {
-  const [open, setOpen] = useState(false);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [tab, setTab] = useState<"suite" | "base">("suite");
+  const [diffOpen, setDiffOpen] = useState(false);
   const pass = receipt.verdict === "PASS";
-  const evidenceText = evidence(receipt);
+
+  const evidence =
+    tab === "suite" ? receipt.suite_output : receipt.base_output;
+  const hasSuite = receipt.suite_output.trim().length > 0;
+  const hasBase = receipt.base_output.trim().length > 0;
 
   return (
     <article
@@ -79,6 +102,12 @@ function ReceiptSheet({ receipt, index }: { receipt: Receipt; index: number }) {
             Receipt <span className="mono">{receipt.id}</span>
           </p>
           <h2 className="branch mono">{receipt.branch}</h2>
+          {(receipt.attempt > 1 || receipt.supersedes) && (
+            <p className="chain mono">
+              Attempt {receipt.attempt}
+              {receipt.supersedes ? ` · supersedes ${receipt.supersedes}` : ""}
+            </p>
+          )}
         </div>
         <div className={`stamp ${pass ? "stamp-pass" : "stamp-fail"}`}>
           {receipt.verdict}
@@ -104,23 +133,62 @@ function ReceiptSheet({ receipt, index }: { receipt: Receipt; index: number }) {
         </div>
       </dl>
 
+      {receipt.diffstat && <p className="diffstat mono">{receipt.diffstat}</p>}
+
       {!pass && receipt.reason && (
         <p className="reason">
           <span className="reason-label">Why it failed</span>
-          {receipt.reason}
+          {receipt.reason.replaceAll("`", "")}
         </p>
       )}
 
-      {evidenceText && (
+      {(hasSuite || hasBase) && (
         <div className="evidence">
+          <div className="tabs">
+            <button
+              className={`tab mono ${tab === "suite" ? "tab-active" : ""}`}
+              onClick={() => {
+                setTab("suite");
+                setEvidenceOpen(true);
+              }}
+              disabled={!hasSuite}
+            >
+              Suite · branch
+            </button>
+            <button
+              className={`tab mono ${tab === "base" ? "tab-active" : ""}`}
+              onClick={() => {
+                setTab("base");
+                setEvidenceOpen(true);
+              }}
+              disabled={!hasBase}
+            >
+              Reproduction · base
+            </button>
+            <button
+              className="evidence-toggle mono"
+              onClick={() => setEvidenceOpen((value) => !value)}
+              aria-expanded={evidenceOpen}
+            >
+              {evidenceOpen ? "− hide" : "+ show"}
+            </button>
+          </div>
+          {evidenceOpen && evidence.trim() && (
+            <pre className="evidence-pre mono">{evidence}</pre>
+          )}
+        </div>
+      )}
+
+      {receipt.diff.trim() && (
+        <div className="diff-block">
           <button
             className="evidence-toggle mono"
-            onClick={() => setOpen((value) => !value)}
-            aria-expanded={open}
+            onClick={() => setDiffOpen((value) => !value)}
+            aria-expanded={diffOpen}
           >
-            {open ? "− hide evidence" : "+ show evidence"}
+            {diffOpen ? "− hide diff" : "+ show diff"}
           </button>
-          {open && <pre className="mono">{evidenceText}</pre>}
+          {diffOpen && <Diff text={receipt.diff} />}
         </div>
       )}
 
@@ -139,6 +207,9 @@ function ReceiptSheet({ receipt, index }: { receipt: Receipt; index: number }) {
                     ? stampTime(receipt.countersigned_at)
                     : ""}
                 </span>
+                {receipt.pr_state && (
+                  <span className="pr-state mono">{receipt.pr_state}</span>
+                )}
               </p>
               {receipt.landed_url &&
                 (receipt.landed_url.startsWith("http") ? (
@@ -159,7 +230,9 @@ function ReceiptSheet({ receipt, index }: { receipt: Receipt; index: number }) {
           <>
             <span className="signature-line" aria-hidden="true" />
             <p className="eyebrow awaiting">
-              {pass ? "Awaiting a person's countersignature" : "Failed verification · nothing to sign"}
+              {pass
+                ? "Awaiting an approver's countersignature"
+                : "Failed verification · nothing to sign"}
             </p>
           </>
         )}
@@ -234,7 +307,7 @@ export default function App() {
         <aside className="rail">
           <p className="rail-lede">
             Agents propose. An independent verifier reproduces the failure and
-            runs the proof. A person countersigns before anything lands.
+            runs the proof. An approver countersigns before anything lands.
           </p>
           <div className="ledger-stats">
             <div>
@@ -263,7 +336,7 @@ export default function App() {
               <span className="mono">03</span> The verifier proves or refutes it.
             </li>
             <li>
-              <span className="mono">04</span> A person signs. It lands.
+              <span className="mono">04</span> An approver signs. It lands.
             </li>
           </ol>
           <p className="rail-foot mono">
