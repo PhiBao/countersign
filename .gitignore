@@ -1,0 +1,11 @@
+.env
+target/
+node_modules/
+.next/
+dist/
+*.sqlite
+*.sqlite-*
+.countersign/
+.worktrees/
+.DS_Store
+*.log
