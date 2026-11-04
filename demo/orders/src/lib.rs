@@ -23,8 +23,14 @@ pub fn subtotal_cents(items: &[LineItem]) -> i64 {
 /// Total after a percentage discount, in cents, rounded to the nearest cent
 /// with half cents rounded away from zero (so a refund mirrors its charge).
 pub fn apply_discount_cents(subtotal_cents: i64, discount_pct: u8) -> i64 {
-    let factor = 1.0 - (discount_pct as f64 / 100.0);
-    (subtotal_cents as f64 * factor) as i64
+    let numerator = i128::from(subtotal_cents) * (100 - i128::from(discount_pct));
+    let rounded = if numerator >= 0 {
+        (numerator + 50) / 100
+    } else {
+        (numerator - 50) / 100
+    };
+
+    rounded as i64
 }
 
 /// The amount the customer is charged (or refunded, when negative).
