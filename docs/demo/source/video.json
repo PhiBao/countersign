@@ -1,0 +1,41 @@
+{
+  "name": "countersign-demo",
+  "output": "out/countersign-demo.mp4",
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "voice": "en-US-AriaNeural",
+  "rate": "-4%",
+  "volume": "+0%",
+  "pad": 0.5,
+  "trim": 0.8,
+  "crf": 20,
+  "preset": "medium",
+  "burn_subtitles": true,
+  "loudness": "I=-16:TP=-1.5:LRA=11",
+  "subtitle_style": "FontName=DejaVu Sans,FontSize=28,PrimaryColour=&HFFFFFF,OutlineColour=&H80000000,BorderStyle=1,Outline=2,Shadow=1,MarginV=44,PlayResX=1920,PlayResY=1080",
+  "theme": {
+    "bg": "#f4f1e8",
+    "accent1": "#d9481c",
+    "accent2": "#b83a14",
+    "accent3": "#6f695d",
+    "ink": "#141312",
+    "muted": "#6f695d",
+    "faint": "#9a9385",
+    "hi": "#a32020",
+    "hi2": "#1d6b4a",
+    "subc": "#b83a14",
+    "shade": "rgba(20,19,18,.06)"
+  },
+  "branding": {
+    "name": "COUNTERSIGN",
+    "tagline": "NO AGENT SHIPS ALONE.",
+    "sub": "Agents propose. An independent verifier proves. An approver signs.",
+    "note": "The verifier has no model in the proof path.",
+    "meta": "propose &rarr; verify &rarr; countersign &rarr; land",
+    "headline": "<b>The trust layer for work done by agents.</b><br><i>Every change has a receipt and a signature.</i>",
+    "links": "github.com/PhiBao/countersign",
+    "footnote": "Built on Switch &middot; WeMakeDevs &times; DevTools Academy",
+    "kicker": "FLIP THE SWITCH HACKATHON · TRACK 01"
+  }
+}

@@ -1,0 +1,80 @@
+1
+00:00:00,100 --> 00:00:03,995
+Coding agents can open a pull request in minutes.
+
+2
+00:00:03,944 --> 00:00:06,601
+Review still takes a person.
+
+3
+00:00:06,601 --> 00:00:11,353
+And the agent that wrote the change is usually the one telling you it
+works.
+
+4
+00:00:12,019 --> 00:00:15,902
+Countersign is a real team room where that changes.
+
+5
+00:00:15,852 --> 00:00:19,393
+A teammate tried a one-line refund fix.
+
+6
+00:00:19,393 --> 00:00:22,257
+It passes the test they were given.
+
+7
+00:00:22,257 --> 00:00:27,452
+The verifier runs the whole suite on a clean checkout, and rejects it.
+
+8
+00:00:27,452 --> 00:00:30,655
+The refund still rounds the wrong way.
+
+9
+00:00:31,310 --> 00:00:34,475
+The verifier does not just say no.
+
+10
+00:00:34,426 --> 00:00:38,801
+It sends the failure back to the fixer with the exact output.
+
+11
+00:00:38,801 --> 00:00:43,736
+The fixer starts from the rejected branch and fixes what the proof
+caught.
+
+12
+00:00:44,410 --> 00:00:47,667
+The second attempt passes every test.
+
+13
+00:00:47,617 --> 00:00:53,112
+The new receipt is chained to the first one, so you can see what
+changed between them.
+
+14
+00:00:53,770 --> 00:00:59,865
+An approver looks at the diff, signs the exact commit, and a real pull
+request opens.
+
+15
+00:00:59,814 --> 00:01:03,370
+The agent never had the authority to land it.
+
+16
+00:01:04,039 --> 00:01:08,350
+Every receipt lives in the proof ledger, and in the room itself.
+
+17
+00:01:08,301 --> 00:01:12,155
+What was proposed, what was proven, who signed.
+
+18
+00:01:12,819 --> 00:01:15,256
+No agent ships alone.
+
+19
+00:01:15,206 --> 00:01:17,016
+Countersign.
+

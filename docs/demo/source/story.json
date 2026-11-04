@@ -1,0 +1,159 @@
+{
+  "voice": "en-US-AriaNeural",
+  "segments": [
+    {
+      "id": "s1_hook",
+      "text": "Coding agents can open a pull request in minutes. Review still takes a person. And the agent that wrote the change is usually the one telling you it works.",
+      "scene": {
+        "kind": "card",
+        "template": "title-left",
+        "vars": {
+          "kicker": "FLIP THE SWITCH HACKATHON \u00b7 TRACK 01"
+        }
+      }
+    },
+    {
+      "id": "s2_fail",
+      "text": "Countersign is a real team room where that changes. A teammate tried a one-line refund fix. It passes the test they were given. The verifier runs the whole suite on a clean checkout, and rejects it. The refund still rounds the wrong way.",
+      "scene": {
+        "kind": "page",
+        "src": "http://127.0.0.1:8065/switch/channels/checkout-incidents",
+        "zoom": 1.15,
+        "wait_for": [
+          "text=checkout-incidents"
+        ],
+        "settle": 2.0,
+        "actions": [
+          {
+            "action": "wait",
+            "sec": 0.8
+          },
+          {
+            "action": "scrollTo",
+            "sel": "text=FAIL \u00b7",
+            "at": 0.12,
+            "dur": 1.4,
+            "after": 1.2
+          }
+        ]
+      }
+    },
+    {
+      "id": "s3_revise",
+      "text": "The verifier does not just say no. It sends the failure back to the fixer with the exact output. The fixer starts from the rejected branch and fixes what the proof caught.",
+      "scene": {
+        "kind": "page",
+        "src": "http://127.0.0.1:8065/switch/channels/checkout-incidents",
+        "zoom": 1.15,
+        "wait_for": [
+          "text=checkout-incidents"
+        ],
+        "settle": 2.0,
+        "actions": [
+          {
+            "action": "wait",
+            "sec": 0.8
+          },
+          {
+            "action": "scrollTo",
+            "sel": "text=@fixer revise",
+            "at": 0.2,
+            "dur": 1.4,
+            "after": 1.2
+          }
+        ]
+      }
+    },
+    {
+      "id": "s4_pass",
+      "text": "The second attempt passes every test. The new receipt is chained to the first one, so you can see what changed between them.",
+      "scene": {
+        "kind": "page",
+        "src": "http://127.0.0.1:8065/switch/channels/checkout-incidents",
+        "zoom": 1.15,
+        "wait_for": [
+          "text=checkout-incidents"
+        ],
+        "settle": 2.0,
+        "actions": [
+          {
+            "action": "wait",
+            "sec": 0.8
+          },
+          {
+            "action": "scrollTo",
+            "sel": "text=PASS \u00b7",
+            "at": 0.14,
+            "dur": 1.4,
+            "after": 1.2
+          }
+        ]
+      }
+    },
+    {
+      "id": "s5_sign",
+      "text": "An approver looks at the diff, signs the exact commit, and a real pull request opens. The agent never had the authority to land it.",
+      "scene": {
+        "kind": "page",
+        "src": "http://127.0.0.1:8065/switch/channels/checkout-incidents",
+        "zoom": 1.15,
+        "wait_for": [
+          "text=checkout-incidents"
+        ],
+        "settle": 2.0,
+        "actions": [
+          {
+            "action": "wait",
+            "sec": 0.8
+          },
+          {
+            "action": "scrollTo",
+            "sel": "text=LANDED",
+            "at": 0.18,
+            "dur": 1.4,
+            "after": 1.2
+          }
+        ]
+      }
+    },
+    {
+      "id": "s6_ledger",
+      "text": "Every receipt lives in the proof ledger, and in the room itself. What was proposed, what was proven, who signed.",
+      "scene": {
+        "kind": "page",
+        "src": "http://127.0.0.1:4090",
+        "zoom": 1.0,
+        "wait_for": [
+          "text=Receipt"
+        ],
+        "settle": 2.0,
+        "actions": [
+          {
+            "action": "wait",
+            "sec": 0.8
+          },
+          {
+            "action": "click",
+            "sel": "text=+ show diff",
+            "after": 0.8
+          },
+          {
+            "action": "scrollTo",
+            "sel": ".diff",
+            "at": 0.18,
+            "dur": 1.2,
+            "after": 1.2
+          }
+        ]
+      }
+    },
+    {
+      "id": "s7_close",
+      "text": "No agent ships alone. Countersign.",
+      "scene": {
+        "kind": "card",
+        "template": "close-left"
+      }
+    }
+  ]
+}

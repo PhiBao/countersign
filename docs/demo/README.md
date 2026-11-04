@@ -1,43 +1,53 @@
 # Countersign demo
 
-`countersign-demo.mp4` is the 66-second submission video. It was recorded from the live room and the live ledger in this repository — no mockups.
+`countersign-demo.mp4` is the 78-second submission video. It was recorded from the live room and the live ledger in this repository — no mockups.
+
+The cut was produced with [`open-video-demo`](https://github.com/PhiBao/open-video-demo): animated HTML cards, Playwright recording of the real Mattermost room and the proof ledger, edge-tts narration, burned subtitles, and an `.srt` sidecar for uploads. The source story and branding are in [`source/story.json`](source/story.json) and [`source/video.json`](source/video.json).
 
 ## What the video shows
 
 | Time | Shot | Claim |
 |---|---|---|
-| 0:00 | Title card | The product thesis: no agent ships alone |
-| 0:15 | The room | A teammate asks the verifier to check a one-line hotfix |
-| 0:21 | FAIL receipt | The hotfix passes the reported test; the full suite catches the refund regression |
-| 0:29 | The hand-back | The verifier sends the failure to the fixer as a work order |
-| 0:36 | The retry | The fixer starts from the rejected branch and proposes attempt two |
-| 0:42 | PASS receipt | Eight tests pass; the receipt chains to the failed one |
-| 0:48 | Countersignature | An approver signs the verified commit; a real PR opens |
-| 0:55 | Proof ledger | Both receipts, the diff, and the signature |
-| 1:03 | End card | `github.com/PhiBao/countersign` |
+| 0:00 | Title card | Coding agents are fast; review is not |
+| 0:12 | The room | A teammate asks the verifier to check a one-line refund fix |
+| 0:19 | FAIL receipt | It passes the reported test; the full suite catches the refund regression |
+| 0:31 | The hand-back | The verifier sends the failure to the fixer as a work order |
+| 0:38 | The retry | The fixer starts from the rejected branch and proposes attempt two |
+| 0:44 | PASS receipt | Eight tests pass; the receipt chains to the failed one |
+| 0:54 | Countersignature | An approver signs the verified commit; a real PR opens |
+| 1:04 | Proof ledger | Both receipts, the diff, and the signature |
+| 1:13 | End card | `github.com/PhiBao/countersign` |
 
 ## Voiceover
 
-> Agents now open more than forty percent of GitHub's pull requests. Teams cannot review them fast enough. Countersign is a Switch room where agents propose, a verifier proves, and an approver signs.
+> Coding agents can open a pull request in minutes. Review still takes a person. And the agent that wrote the change is usually the one telling you it works.
 >
-> A teammate's one-line hotfix passes the reported test. The verifier reruns the full suite on a clean checkout, and rejects it. Refunds still round the wrong way.
+> Countersign is a real team room where that changes. A teammate tried a one-line refund fix. It passes the test they were given. The verifier runs the whole suite on a clean checkout, and rejects it. The refund still rounds the wrong way.
 >
-> The verifier hands the failure back to the fixer with the exact output. The fixer starts from the rejected branch and fixes what the receipt caught.
+> The verifier does not just say no. It sends the failure back to the fixer with the exact output. The fixer starts from the rejected branch and fixes what the proof caught.
 >
-> Attempt two passes all eight tests, and the new receipt chains to the first one.
+> The second attempt passes every test. The new receipt is chained to the first one, so you can see what changed between them.
 >
-> An approver sees the diff, countersigns the verified commit, and a real pull request opens.
+> An approver looks at the diff, signs the exact commit, and a real pull request opens. The agent never had the authority to land it.
 >
-> Both receipts live in the proof ledger, and in the room itself. What was proposed, what was proven, who signed.
+> Every receipt lives in the proof ledger, and in the room itself. What was proposed, what was proven, who signed.
 >
 > No agent ships alone. Countersign.
 
-## How it was built
+## Rebuilding
 
-1. `scripts/record-demo.mjs` drives Mattermost with Playwright and records eight short clips. Each clip opens a fresh page *after* the state it shows exists, so the edit has no dead time.
-2. `edge-tts` (voice `en-US-AriaNeural`) generates one voiceover track per section.
-3. `scripts/build-video.py` cuts, crops, overlays captions, muxes the audio, and concatenates the sections.
+The story/config are ordinary `open-video-demo` project files. From an `open-video-demo` checkout:
 
-Recording requires the stack, the room, and both agents running, plus `playwright-core` (`npm i playwright-core` in a scratch directory) and `edge-tts`. The raw clips and intermediate files live in `/tmp/countersign-video` and are not committed.
+```bash
+cp docs/demo/source/story.json      videos/countersign-demo/script/story.json
+cp docs/demo/source/video.json      videos/countersign-demo/config/video.json
 
-The room's chat surface is Mattermost because it is the bundled, zero-admin chat app of the local Switch stack. The same flow works on a connected Slack, Teams, or Discord channel.
+# The room needs an authenticated Mattermost session and the preview banner hidden.
+DEMO_STORAGE_STATE=/path/to/mm-storage.json \
+DEMO_INIT_SCRIPT=/path/to/countersign-demo-init.js \
+./scripts/run.sh --project countersign-demo
+```
+
+`DEMO_STORAGE_STATE` is a Playwright storage-state JSON with the `MMAUTHTOKEN` and `MMUSERID` cookies plus `__landingPageSeen__` in localStorage. The init script hides the Mattermost preview banner and sets the cursor accent to Countersign orange.
+
+The chat surface is Mattermost because it is the bundled, zero-admin chat app of the local Switch stack. The same room works over a connected Slack, Teams, or Discord channel; the video uses Mattermost so a judge can reproduce it with no workspace admin.
