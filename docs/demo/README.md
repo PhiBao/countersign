@@ -35,6 +35,6 @@
 2. `edge-tts` (voice `en-US-AriaNeural`) generates one voiceover track per section.
 3. `scripts/build-video.py` cuts, crops, overlays captions, muxes the audio, and concatenates the sections.
 
-Recording requires the stack, the room, and both agents running, plus `playwright-core` and `edge-tts`. The raw clips and intermediate files live in `/tmp/countersign-video` and are not committed.
+Recording requires the stack, the room, and both agents running, plus `playwright-core` (`npm i playwright-core` in a scratch directory) and `edge-tts`. The raw clips and intermediate files live in `/tmp/countersign-video` and are not committed.
 
 The room's chat surface is Mattermost because it is the bundled, zero-admin chat app of the local Switch stack. The same flow works on a connected Slack, Teams, or Discord channel.

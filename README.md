@@ -326,6 +326,12 @@ docker-compose.yml         Self-hosted Switch stack (server + gateway + Mattermo
 
 ---
 
+## Submission
+
+- [Submission summary](SUBMISSION.md)
+- Public project page: https://phibao.github.io/countersign/
+- Build note: https://phibao.github.io/countersign/blog/building-countersign.html
+
 ## Hackathon relevance
 
 - **Track:** Best Business Workflow ($2,000).
