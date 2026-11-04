@@ -2,7 +2,7 @@
 
 **No agent ships alone.**
 
-Countersign is a Switch room where AI agents propose changes, an independent verifier proves or refutes them with reproducible evidence, and a named person countersigns before anything lands.
+Countersign is a Switch room where AI agents propose changes, an independent verifier proves or refutes them with reproducible evidence, and a designated approver countersigns before anything lands.
 
 Built for the **Flip the Switch Hackathon** (WeMakeDevs × DevTools Academy, powered by Switch AI), **Track 01 — Best Business Workflow**.
 
@@ -37,13 +37,16 @@ Person        reports the failing refund total
 Fixer         proposes a branch in its own checkout
 Verifier      reproduces the failure on main, runs the full suite on the branch,
               refuses branches that edit their own tests, issues a receipt
-Person        countersigns the passing receipt
+Verifier      on failure, hands the receipt back to the fixer as a work order
+Fixer         starts from the rejected branch, fixes what the receipt caught
+Verifier      verifies attempt 2 and chains the receipt to attempt 1
+Approver      countersigns the passing, pinned commit
 Verifier      opens the pull request (or merges locally)
 ```
 
 The rule is structural, not a prompt:
 
-> **The proposer cannot verify. The verifier cannot write. Only a person can countersign. Only a passing receipt can be countersigned.**
+> **The proposer cannot verify. The verifier cannot write. Only an approver can countersign. Only a passing receipt can be countersigned.**
 
 That is the whole product. Everything else exists to make those four sentences true and visible.
 
@@ -69,10 +72,12 @@ The strongest test of whether Switch is load-bearing: remove it and the product 
 
 The repository ships a deliberately buggy checkout service (`demo/orders`). A $19.99 refund at 50% off should return $10.00; the code truncates the half cent and returns $9.99.
 
-Two things happen in the recorded demo:
+The recorded demo is one change, two attempts:
 
 1. **A plausible hotfix is rejected.** A teammate's one-line fix (`hotfix/naive-rounding`) adds `+ 0.5` to the float. It passes the reported test. The verifier runs the full suite and issues a **FAIL** receipt: refunds still round in the wrong direction.
-2. **The real fix passes and lands.** The fixer works in an isolated copy, proposes `fix/…`, and hands off. The verifier reproduces the failure on `main`, runs all 8 tests on the branch, and issues a **PASS** receipt. The person replies `@verifier countersign R-XXXXXX`. A real GitHub pull request opens with the receipt attached.
+2. **The failure becomes a work order.** The verifier addresses `@fixer revise R-…` with the failing tests and the exact output. The fixer starts from the rejected branch, fixes what the receipt caught, and proposes `retry/…` with `supersedes R-…`.
+3. **Attempt two passes and chains.** The verifier reproduces the failure on `main`, runs all 8 tests on the retry, and issues a **PASS** receipt linked to the first one.
+4. **The approver signs a pinned commit.** `@verifier countersign R-…` re-checks the branch head and base, then opens a real GitHub pull request. The receipt, the diff, and the signature live in the room and in the ledger.
 
 The FAIL is not staged model output. It is a real branch, real tests, and a real receipt. The verification path contains no model.
 
@@ -86,7 +91,8 @@ Countersign is a protocol-level Switch client, not a wrapper around the Console:
 |---|---|
 | **Rooms** | One channel becomes the shared record: reports, proposals, receipts, and signatures |
 | **Agent protocol** | The verifier is a Rust WebSocket client (`/agents/{id}/connection/ws`), answering `ping` with `pong` + cursor and calling operations over HTTP |
-| **Room operations** | `connect_to_room`, `post_message`, `list_participants` |
+| **Room operations** | `connect_to_room`, `post_message`, `list_participants`, `create_room_document` |
+| **Room documents** | Every receipt is also written as a room-scoped document, discoverable with `!list-documents` |
 | **Roles** | `@fixer` (shared) and `@verifier` (exclusive). The verifier's exclusive lease means two verifiers cannot issue contradictory receipts |
 | **Addressing policy** | The bootstrap opens both agents to room members; the role, not a hard-coded name, is what people address |
 | **Room instructions** | The room carries the rules every agent reads on join: propose, never land; verify, never write; a person signs |
@@ -114,21 +120,21 @@ The verifier does the same thing every time, with no model in the loop:
 
 1. Resolve the branch; reject the base branch and malformed names.
 2. Diff `main...branch`. Reject any branch that touches `demo/orders/tests/**` or anything outside `demo/orders/**`.
-3. Create one clean worktree at `main`. Run the reported regression test. It **must fail** — otherwise the verifier refuses to certify a fix for a bug that is not there.
-4. Check out the branch in the same worktree. Run the **full** suite. It must pass.
-5. Issue a receipt: branch, commit SHA, changed files, duration, the exact command output, and a verdict.
-6. Store it in SQLite and post it to the room.
+3. Create one clean worktree at the base revision. Run the configured reproduction command. It **must fail** — otherwise the verifier refuses to certify a fix for a bug that is not there.
+4. Check out the branch in the same worktree. Run the configured **full** suite in a scrubbed environment. It must pass.
+5. Issue a receipt: branch, commit SHA, base SHA, changed files, diffstat, the full diff, the exact command output, attempt number, parent receipt, and a verdict.
+6. Store it in SQLite, post it to the room, and write it as a room document.
 
 A branch that edits its own tests is rejected before any test runs. A branch that "fixes" a bug that does not reproduce is rejected. A failed receipt can never be countersigned.
 
 ### The countersignature
 
-A person replies `@verifier countersign R-XXXXXX`.
+An approver replies `@verifier countersign R-XXXXXX`.
 
-The verifier resolves the sender through the room's participant list and requires a **human** participant — an agent's countersignature is refused. The receipt must be `PASS` and unsigned. Then and only then:
+The verifier resolves the sender through the room's participant list and requires a **human** participant — an agent's countersignature is refused — and, when `approvers` is configured, a **designated approver**. The receipt must be `PASS` and unsigned. Before any irreversible action it re-checks that the branch still points at the verified commit and that the base has not moved. Then and only then:
 
-- `COUNTERSIGN_PR_MODE=gh`: push the branch and open a real pull request containing the receipt.
-- `COUNTERSIGN_PR_MODE=local`: merge into a local proof branch, `countersign/landed`, for offline reproduction.
+- `COUNTERSIGN_PR_MODE=gh`: push the **verified commit** to the branch and open a real pull request containing the receipt.
+- `COUNTERSIGN_PR_MODE=local`: merge the **verified commit** into a local proof branch, `countersign/landed`, for offline reproduction.
 
 The receipt is marked signed only after landing succeeds. A failed landing leaves it unsigned.
 
@@ -159,12 +165,14 @@ This starts Postgres, the Switch server (`:8000`), the Gateway (`:3000`), and a 
 ./scripts/bootstrap.sh
 ```
 
-The script is idempotent. It signs in as the Gateway admin, creates a registration key, registers `countersign-fixer` and `countersign-verifier`, opens both to room members, and creates the `checkout-incidents` room with the `fixer` and `verifier` roles. It writes credentials to `.countersign/agents.env` (mode 600).
+The script is idempotent. It signs in as the Gateway admin, creates a registration key, registers `countersign-fixer` and `countersign-verifier`, opens both to room members, and creates the `checkout-incidents` room with the `fixer` and `verifier` roles. It writes credentials, the approver list, and the retry limit to `.countersign/agents.env` (mode 600).
+
+Per-repository behaviour lives in [`countersign.toml`](countersign.toml): base revision, work directory, test and reproduction commands, allowed and denied paths, approvers, attempts, and the landing mode. Environment variables override it.
 
 ### 3. Build the viewer and start the agents
 
 ```bash
-cd viewer && pnpm install && pnpm build && cd ..
+./scripts/doctor.sh          # read-only preflight: stack, agents, model, tests
 ./scripts/start-agents.sh
 ```
 
@@ -175,25 +183,24 @@ Open **http://127.0.0.1:4090** for the proof ledger and **http://127.0.0.1:8065*
 In the `checkout-incidents` channel:
 
 ```
-@verifier verify hotfix/naive-rounding        # → FAIL receipt: refunds still round the wrong way
-@fixer fix the discounted refund total is a cent off on half-cent amounts.
-         The reported failing test is half_cent_charges_round_up;
-         refunds use the same rule and must round symmetrically.
+@verifier verify hotfix/naive-rounding
 ```
 
-The fixer proposes a branch and hands off automatically:
-
-```
-@verifier verify fix/…
-```
-
-The verifier issues a **PASS** receipt. Then, as the person:
+That is the whole demo. The verifier issues a **FAIL** receipt naming the refund invariants, then addresses `@fixer revise R-…` automatically. The fixer starts from the rejected branch and proposes `retry/… supersedes R-…`; the verifier issues a chained **PASS**. Then, as an approver:
 
 ```
 @verifier countersign R-XXXXXX
 ```
 
-A pull request opens (or the change lands on `countersign/landed` in local mode). The ledger shows the FAIL, the PASS, and the signature.
+A pull request opens (or the change lands on `countersign/landed` in local mode). The ledger shows both attempts, the diff, and the signature.
+
+You can also verify a real pull request in the configured repository:
+
+```
+@verifier verify https://github.com/PhiBao/countersign/pull/7
+```
+
+The verifier pins the PR head, refuses a PR that moves during the fetch, and issues a receipt for that exact commit.
 
 Useful helpers:
 
@@ -214,6 +221,13 @@ Useful helpers:
 | Independent reproduction and full test suite | **Real** — clean worktree, exact command output, no model |
 | Scope enforcement and test tampering rejection | **Real** — enforced before tests run |
 | Human-only countersignature | **Real** — participant type checked; agents refused |
+| Designated approvers | **Real** — `approvers` in `countersign.toml` or `COUNTERSIGN_APPROVERS`; others are refused |
+| Verified-commit landing | **Real** — the branch head and base are re-checked at signing; the commit SHA is pushed, not the branch name |
+| Automatic retry | **Real** — a FAIL receipt becomes a fixer work order; attempt 2 chains to attempt 1 and stops at the configured limit |
+| Real PR verification | **Real** — `verify <PR URL>` fetches and pins the head commit; fork PRs are refused |
+| Room documents | **Real** — each receipt is a room-scoped document listed by `!list-documents` |
+| Scrubbed test execution | **Real** — the verifier clears its environment before running branch code |
+| Diff for the signer | **Real** — the ledger shows the full diff and diffstat for every receipt |
 | Pull request | **Real** with `COUNTERSIGN_PR_MODE=gh` and `gh` auth; otherwise a **real local merge** into `countersign/landed`, labelled as such |
 | The fixer's change | **Real** — an existing coding agent edits a real checkout; the exact diff depends on the model |
 | The demo bug | **Deliberately seeded** in the fixture; tests and invariants are real |
@@ -244,6 +258,10 @@ Nothing in the proof path is mocked. The only "fixture" is the bug itself, which
 | Fixer claims a fix for a bug that does not exist | Verifier requires the reported test to fail on `main`; no receipt |
 | Fixer adds `@verifier countersign R-…` to a message | Participant type is `agent`; countersignature refused |
 | Replay an old passing receipt | Receipts are single-use; a signed receipt cannot be signed again |
+| Move the branch after verification, then sign | Refused: the branch head no longer matches the receipt's commit |
+| Move the base after verification, then sign | Refused: the verifier requires a fresh receipt against the current base |
+| Countersign as a non-approver | Refused by name against the configured approver list |
+| Read the agent key from branch code | Test commands run with a scrubbed environment; `SWITCH_*` and `COUNTERSIGN_*` are removed |
 | Land without a signature | Landing is only reachable from the countersign handler |
 | Prompt injection in the report | The verifier never sees the report text; it acts only on a branch name. The fixer is sandboxed to a disposable copy and cannot land |
 
@@ -258,7 +276,8 @@ Nothing in the proof path is mocked. The only "fixture" is the bug itself, which
 | A coding agent is offline | Switch reports the agent as unavailable; the room keeps the last state. Start it with `./scripts/start-agents.sh` |
 | The fixer produces no change | It posts "I couldn't find a change to propose" and removes its branch |
 | Verification times out | The handler returns an error to the room; no receipt is written |
-| The branch fails the suite | FAIL receipt with the failing test names and output; nothing can land |
+| The branch fails the suite | FAIL receipt with the failing test names and output; the verifier hands it to the fixer once, then escalates to a person |
+| The retry also fails | No further loop; the verifier says the attempt limit is reached |
 | Landing fails (conflict, no auth) | The receipt stays unsigned; the room is told exactly what failed |
 | Switch disconnects | The client reconnects with the same connection id and cursor; `evicted` is logged and the socket reopens |
 | Two verifications at once | The verifier takes one at a time and says so; the exclusive role is the backstop |
@@ -273,26 +292,31 @@ cargo test -p orders-demo            # 3 failures: the regression + two invarian
 
 # The verifier's core logic is deterministic; build and unit-test the workspace:
 cargo build
-cargo test -p countersign          # 9 unit tests: branch guards, summaries, ledger round-trip
+cargo test -p countersign          # 20 tests: branch guards, summaries, ledger round-trip,
+                                   #          and integration tests for the verifier's verdicts
 cargo test -p orders-demo          # fails on purpose: this is the demo fixture
 ```
 
 Manual checks used before submission:
 
 1. `hotfix/naive-rounding` → FAIL receipt naming `refunds_round_symmetrically`.
-2. `fix/…` from the fixer → PASS receipt with `8 passed; 0 failed`.
-3. `@verifier countersign R-…` as the human → PR opened / local merge.
+2. The FAIL receipt → `@fixer revise R-…` work order → chained PASS attempt 2.
+3. `@verifier countersign R-…` as the approver → PR opened / local merge.
 4. `@verifier countersign R-…` from an agent identity → refused.
-5. A branch touching `demo/orders/tests/**` → FAIL before tests run.
-6. A branch with no changes → refused.
-7. A branch that does not reproduce the bug → refused.
+5. A non-approver human → refused by name.
+6. A branch moved after verification → refused before landing.
+7. A branch touching `demo/orders/tests/**` → FAIL before tests run.
+8. A branch that does not reproduce the bug → refused.
+9. A real PR URL → PASS/PASS receipt for the pinned head commit.
+10. `!list-documents` → both receipts as room-scoped documents.
 
 ---
 
 ## Limitations
 
-- One room, one repository, one fixture at a time. The verifier is configured per deployment (`COUNTERSIGN_*`), not multi-tenant.
-- The human check is name-based (see Security). It fails closed on ambiguity, but a production system needs a bridge-identity mapping.
+- One room, one repository, one fixture at a time. The verifier is configured per repository (`countersign.toml` plus environment), not multi-tenant.
+- The human and approver checks are name-based (see Security). They fail closed on ambiguity, but a production system needs a bridge-identity mapping.
+- `verify <PR URL>` works for same-repository PRs; fork PRs are refused because landing would push to the wrong remote.
 - The fixer's diff depends on the model and the report. The verifier makes the outcome trustworthy, not the model deterministic.
 - The fixer is not OS-sandboxed; see the security note above.
 - The viewer and API are loopback-only and unauthenticated; they are a proof surface, not a multi-user dashboard.
@@ -319,7 +343,8 @@ The wedge is narrow on purpose: one change, one verifier, one signature. The cat
 agents/countersign/        Rust agent: Switch protocol client, verifier, fixer, ledger, API
 demo/orders/               Deliberately buggy checkout fixture + tests
 viewer/                    React proof ledger (Vite + TypeScript)
-scripts/                   Bootstrap, run/stop agents, room helpers
+scripts/                   Bootstrap, doctor, run/stop agents, room helpers
+countersign.toml           Per-repository verification and landing policy
 docs/diagrams/             Architecture and sequence diagrams (HTML + PNG)
 docker-compose.yml         Self-hosted Switch stack (server + gateway + Mattermost)
 ```
@@ -336,9 +361,9 @@ docker-compose.yml         Self-hosted Switch stack (server + gateway + Mattermo
 
 - **Track:** Best Business Workflow ($2,000).
 - **Use of Switch:** central and structural — rooms, roles, addressing, the agent protocol, and the room log are the product. Removing Switch removes the control plane.
-- **Technical execution:** a protocol-level Rust agent, a deterministic verification engine, scope enforcement, a receipt ledger, a real PR path, and a reproducible one-command stack.
+- **Technical execution:** a protocol-level Rust agent, a deterministic verification engine, a scrubbed test runner, a chained retry loop, pinned landing, room documents, a receipt ledger, a real PR path, and a reproducible one-command stack.
 - **Creativity and impact:** a real team problem (agent output outpacing review), with a mechanism — separation of duties — rather than another prompt.
-- **Presentation:** a FAIL that is visible, a PASS that is earned, a signature that is a person's, and a ledger a judge can open.
+- **Presentation:** a FAIL that is visible, a retry that the room performs itself, a PASS that is earned, a signature from a designated approver, and a ledger a judge can open.
 
 Built during the hackathon window. The Switch room, roles, instructions, agent registrations, and workflow were created for this submission. The coding agent is existing (OpenCode), as the brief allows.
 

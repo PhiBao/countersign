@@ -8,7 +8,7 @@
 
 ## One line
 
-A Switch room where AI agents propose changes, an independent verifier proves or refutes them with reproducible evidence, and a named person countersigns before anything lands.
+A Switch room where AI agents propose changes, an independent verifier proves or refutes them with reproducible evidence, and a designated approver countersigns before anything lands.
 
 ## Links
 
@@ -18,11 +18,11 @@ A Switch room where AI agents propose changes, an independent verifier proves or
 | Demo video (66s) | [docs/demo/countersign-demo.mp4](docs/demo/countersign-demo.mp4) · https://phibao.github.io/countersign/demo/countersign-demo.mp4 |
 | Project page | https://phibao.github.io/countersign/ |
 | Build note (Best Blog) | https://phibao.github.io/countersign/blog/building-countersign.html |
-| Live proof | https://github.com/PhiBao/countersign/pull/4 |
+| Live proof | https://github.com/PhiBao/countersign/pull/7 |
 
 ## The two-minute path for a judge
 
-1. Watch the 66-second video. It shows a real Mattermost room, a real FAIL receipt, a real PASS receipt, a real countersignature, and a real GitHub pull request.
+1. Watch the 66-second video. It shows a real Mattermost room, a real FAIL receipt, the verifier handing the failure back to the fixer, a chained PASS on attempt two, a real countersignature, and a real GitHub pull request.
 2. Read the top of the README for the problem and the mechanism.
 3. Open the proof ledger screenshot / run `http://127.0.0.1:4090` after setup.
 4. If you want to reproduce: `./scripts/init-env.sh`, `docker compose up -d`, `./scripts/bootstrap.sh`, `./scripts/start-agents.sh`, then post the two messages from the README.
@@ -42,10 +42,11 @@ Remove Switch and the product has no room, no roles, no policy, no shared record
 ## What is real
 
 - Self-hosted Switch 0.31.0 with bundled Mattermost.
-- A Rust verifier with **zero model calls in the proof path**: clean worktree, reproduce the failure on `main`, full suite on the branch, scope and test-tampering checks, receipt.
+- A Rust verifier with **zero model calls in the proof path**: clean worktree, reproduce the failure on the base, full suite on the branch in a scrubbed environment, scope and test-tampering checks, diff and diffstat, receipt.
 - A fixer driven by an existing coding agent (OpenCode), isolated in a disposable copy of the repository.
-- Human-only countersignature, checked against the room's participants.
-- A real GitHub pull request with the receipt in the body.
+- Human-only, approver-only countersignature, checked against the room's participants and the configured approver list.
+- Landing pinned to the verified commit; a branch or base that moved is refused.
+- A real GitHub pull request with the receipt and diffstat in the body.
 - A proof ledger served by the same Rust process.
 
 The demo bug is deliberately seeded; the FAIL branch, tests, receipts, PR, and signature are real.
@@ -55,14 +56,15 @@ The demo bug is deliberately seeded; the FAIL branch, tests, receipts, PR, and s
 | Criterion | Evidence |
 |---|---|
 | **Use of Switch** | The room is the control plane; removing Switch removes roles, addressing, the shared log, and the identity behind a countersignature |
-| **Technical execution** | Protocol-level Rust agent, deterministic verification, scope enforcement, one-command stack, tests, reproducible demo |
-| **Creativity and impact** | A real team problem (agent output outpacing review) with a structural mechanism — separation of duties — and a credible path beyond the demo |
+| **Technical execution** | Protocol-level Rust agent, deterministic verification, scrubbed test execution, a closed retry loop, pinned landing, room documents, one-command stack, 20 tests, reproducible demo |
+| **Creativity and impact** | A real team problem (agent output outpacing review) with a structural mechanism — separation of duties plus a self-correcting retry — and a credible path beyond the demo |
 | **Presentation** | A 66-second demo with a FAIL that is visible, a PASS that is earned, a signature that is a person's, and a public build note |
 
 ## Known limitations (stated, not hidden)
 
 - One room and one repository per deployment; not multi-tenant.
-- The human check resolves by room participant name because Switch exposes client ids and participant ids in different namespaces; production should map the bridge identity to a Switch user and sign receipts with a key.
+- The human and approver checks resolve by room participant name because Switch exposes client ids and participant ids in different namespaces; production should map the bridge identity to a Switch user and sign receipts with a key.
+- `verify <PR URL>` supports same-repository PRs; fork PRs are refused because landing would push to the wrong remote.
 - The fixer executes model-chosen commands on the operator's machine; it is confined to a disposable copy but not OS-sandboxed.
 - The viewer and ledger API are loopback-only and unauthenticated — a proof surface, not a dashboard.
 - `COUNTERSIGN_PR_MODE=local` produces a real merge on `countersign/landed`, not a PR; this is for offline reproduction.
@@ -76,10 +78,10 @@ The demo bug is deliberately seeded; the FAIL branch, tests, receipts, PR, and s
 **Track:** 01 — Best Business Workflow
 
 **Short description:**
-Countersign is a Switch room where AI agents propose changes, an independent verifier proves or refutes them with reproducible evidence, and a named person countersigns before anything lands.
+Countersign is a Switch room where AI agents propose changes, an independent verifier proves or refutes them with reproducible evidence, and a designated approver countersigns before anything lands.
 
 **Long description:**
-Coding agents now open more than 40% of GitHub's pull requests, but review has not scaled with generation. The agent that wrote a change is usually the one reporting whether it works — it grades its own homework, and the room has no way to tell. Countersign makes verification a separate job in the room. A fixer agent proposes a branch in its own checkout. A deterministic Rust verifier reproduces the reported failure on main, runs the full suite on the branch in a clean worktree, refuses branches that edit their own tests, and issues a receipt with the exact evidence. Only a person can countersign a passing receipt; only then does the change land as a real pull request. Switch is the control plane: rooms, roles, addressing policy, and the shared log. Remove it and there is no room, no role, no policy, and no record to sign.
+Coding agents now open more than 40% of GitHub's pull requests, but review has not scaled with generation. The agent that wrote a change is usually the one reporting whether it works — it grades its own homework, and the room has no way to tell. Countersign makes verification a separate job in the room. A fixer agent proposes a branch in its own checkout. A deterministic Rust verifier reproduces the reported failure on the base, runs the full suite on the branch in a clean worktree and a scrubbed environment, refuses branches that edit their own tests, and issues a receipt with the exact evidence and diff. On failure, the verifier hands the receipt back to the fixer, which starts from the rejected branch and produces a chained second attempt. Only a designated approver can countersign a passing receipt; the verifier re-checks the branch head and base, then lands the exact verified commit as a real pull request. Switch is the control plane: rooms, roles, addressing policy, room documents, and the shared log. Remove it and there is no room, no role, no policy, and no record to sign.
 
 **Repo:** https://github.com/PhiBao/countersign
 
@@ -92,7 +94,7 @@ Coding agents now open more than 40% of GitHub's pull requests, but review has n
 **Built with:** Switch 0.31.0, Rust, Axum, tokio-tungstenite, rusqlite, React, Vite, TypeScript, OpenCode, Docker Compose, Mattermost, GitHub CLI.
 
 **Message if the form asks for one:**
-Countersign is a Switch room where AI agents propose changes, an independent Rust verifier reproduces the failure and runs the proof, and a named person countersigns before a real pull request opens. The verifier has no model in the proof path. 66-second demo: https://phibao.github.io/countersign/demo/countersign-demo.mp4 — Repo: https://github.com/PhiBao/countersign — Built on Switch 0.31.0.
+Countersign is a Switch room where AI agents propose changes, an independent Rust verifier reproduces the failure and runs the proof, and a designated approver countersigns before a real pull request opens. A failed receipt becomes a fixer work order; attempt two chains to attempt one. The verifier has no model in the proof path. 66-second demo: https://phibao.github.io/countersign/demo/countersign-demo.mp4 — Repo: https://github.com/PhiBao/countersign — Built on Switch 0.31.0.
 
 ---
 
