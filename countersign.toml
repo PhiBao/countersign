@@ -1,0 +1,22 @@
+# Countersign repository configuration.
+#
+# Environment variables override every value here, so a deployment can retarget
+# a checkout without editing this file.
+
+base = "main"
+workdir = "demo/orders"
+
+test = ["cargo", "test", "-p", "orders-demo"]
+repro = ["cargo", "test", "-p", "orders-demo", "--test", "checkout", "half_cent_charges_round_up", "--", "--exact"]
+
+allow = ["demo/orders/src"]
+deny = ["demo/orders/tests"]
+
+approvers = ["user"]
+max_attempts = 2
+
+[pr]
+# "local" works offline; set COUNTERSIGN_PR_MODE=gh (or mode = "gh") to open a
+# real pull request with an authenticated `gh`.
+mode = "local"
+repo = "PhiBao/countersign"

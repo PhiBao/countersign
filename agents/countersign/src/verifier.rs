@@ -35,6 +35,136 @@ impl Verifier {
         })
     }
 
+    async fn handle_verify_pr(&self, message: &IncomingMessage, url: &str) -> Result<()> {
+        let Some((repo, number)) = parse_pr_url(url) else {
+            self.client
+                .post_message(
+                    &message.room_id,
+                    "That doesn't look like a pull request URL. Use `https://github.com/owner/repo/pull/N`.",
+                )
+                .await?;
+            return Ok(());
+        };
+        if let Some(expected) = &self.config.github_repo {
+            if !repo.eq_ignore_ascii_case(expected) {
+                self.client
+                    .post_message(
+                        &message.room_id,
+                        &format!(
+                            "I verify `{expected}` in this deployment, not `{repo}`."
+                        ),
+                    )
+                    .await?;
+                return Ok(());
+            }
+        }
+
+        self.client
+            .post_message(
+                &message.room_id,
+                &format!("Fetching PR #{number} from `{repo}` and pinning its head."),
+            )
+            .await?;
+
+        let viewed = run(
+            "gh",
+            &[
+                "pr".to_string(),
+                "view".to_string(),
+                number.clone(),
+                "--repo".to_string(),
+                repo.clone(),
+                "--json".to_string(),
+                "headRefName,headRefOid,baseRefName,isCrossRepository".to_string(),
+                "--jq".to_string(),
+                ".headRefName + \"\\t\" + .headRefOid + \"\\t\" + .baseRefName + \"\\t\" + (.isCrossRepository|tostring)".to_string(),
+            ],
+            &self.config.repo,
+            &[],
+            Duration::from_secs(60),
+        )
+        .await?;
+        if !viewed.success {
+            self.client
+                .post_message(
+                    &message.room_id,
+                    &format!("I couldn't read PR #{number}: {}", viewed.tail(600)),
+                )
+                .await?;
+            return Ok(());
+        }
+        let line = viewed.combined.lines().find(|line| line.contains('\t')).unwrap_or("");
+        let fields: Vec<&str> = line.split('\t').collect();
+        if fields.len() < 4 {
+            self.client
+                .post_message(
+                    &message.room_id,
+                    &format!("I couldn't parse the metadata for PR #{number}."),
+                )
+                .await?;
+            return Ok(());
+        }
+        let (head, head_oid, base, cross) = (fields[0], fields[1], fields[2], fields[3]);
+        if base != self.config.base_ref {
+            self.client
+                .post_message(
+                    &message.room_id,
+                    &format!(
+                        "PR #{number} targets `{base}`; this verifier is configured for `{}`.",
+                        self.config.base_ref
+                    ),
+                )
+                .await?;
+            return Ok(());
+        }
+        if cross == "true" {
+            self.client
+                .post_message(
+                    &message.room_id,
+                    "That PR comes from a fork. I can verify same-repository PRs only, because landing a fork would push to the wrong place.",
+                )
+                .await?;
+            return Ok(());
+        }
+
+        let fetched = run(
+            "git",
+            &[
+                "fetch".to_string(),
+                "origin".to_string(),
+                "--force".to_string(),
+                format!("pull/{number}/head:refs/heads/{head}"),
+            ],
+            &self.config.repo,
+            &[],
+            Duration::from_secs(120),
+        )
+        .await?;
+        if !fetched.success {
+            self.client
+                .post_message(
+                    &message.room_id,
+                    &format!("I couldn't fetch PR #{number}: {}", fetched.tail(600)),
+                )
+                .await?;
+            return Ok(());
+        }
+        let local = rev(&self.config.repo, head).await?;
+        if local != head_oid {
+            self.client
+                .post_message(
+                    &message.room_id,
+                    &format!(
+                        "PR #{number} moved while I was fetching it. Run the command again so the receipt is for one commit."
+                    ),
+                )
+                .await?;
+            return Ok(());
+        }
+
+        self.handle_verify(message, head, None).await
+    }
+
     async fn handle_verify(
         &self,
         message: &IncomingMessage,
@@ -120,6 +250,21 @@ impl Verifier {
             &self.config.base_ref,
         );
         self.client.post_message(&message.room_id, &text).await?;
+        // Keep the receipt in the room itself, not only in our index: Switch
+        // documents are the durable, queryable record a teammate can open.
+        let document = format!("receipt-{}", receipt.id.to_lowercase());
+        if let Err(error) = self
+            .client
+            .create_room_document(
+                &document,
+                &format!("Countersign receipt {}", receipt.id),
+                "Read this when auditing the change. It contains the verifier's exact evidence.",
+                &text,
+            )
+            .await
+        {
+            warn!("could not store receipt as a room document: {error:#}");
+        }
 
         if receipt.verdict == Verdict::Fail {
             self.escalate_or_revise(&receipt).await?;
@@ -469,6 +614,9 @@ impl Handler for Verifier {
                     supersedes = parts.next().map(str::to_string);
                 }
             }
+            if branch.starts_with("http") {
+                return self.handle_verify_pr(&message, branch).await;
+            }
             return self
                 .handle_verify(&message, branch, supersedes.as_deref())
                 .await;
@@ -484,6 +632,18 @@ impl Handler for Verifier {
         // command. Stay quiet rather than adding noise to the room.
         Ok(())
     }
+}
+
+fn parse_pr_url(url: &str) -> Option<(String, String)> {
+    let parts: Vec<&str> = url.trim_end_matches('/').split('/').collect();
+    let pull = parts.iter().position(|part| *part == "pull")?;
+    let owner = parts.get(pull.checked_sub(2)?)?;
+    let repo = parts.get(pull.checked_sub(1)?)?;
+    let number = parts.get(pull + 1)?;
+    if !number.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    Some((format!("{owner}/{repo}"), number.to_string()))
 }
 
 async fn rev(repo: &Path, reference: &str) -> Result<String> {
@@ -640,7 +800,7 @@ fn truncate(text: &str, limit: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{count_before, count_before as _, suite_summary};
+    use super::{count_before, parse_pr_url, suite_summary};
 
     #[test]
     fn counts_a_single_test_result_line() {
@@ -661,6 +821,15 @@ running 3 tests
 test result: ok. 3 passed; 0 failed; 0 ignored
 ";
         assert_eq!(suite_summary(output), "8 passed; 0 failed");
+    }
+
+    #[test]
+    fn parses_a_pull_request_url() {
+        assert_eq!(
+            parse_pr_url("https://github.com/PhiBao/countersign/pull/5"),
+            Some(("PhiBao/countersign".into(), "5".into()))
+        );
+        assert_eq!(parse_pr_url("https://example.com/not-a-pr"), None);
     }
 
     #[test]

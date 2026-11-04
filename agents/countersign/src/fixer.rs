@@ -44,7 +44,7 @@ impl Fixer {
 
     fn fix_prompt(&self, report: &str, branch: &str) -> String {
         format!(
-            r#"You are the fixer in a team room called "checkout-incidents". You are working in the Rust crate `demo/orders` of a disposable checkout on branch `{branch}`.
+            r#"You are the fixer in a team room called "checkout-incidents". You are working in `{workdir}` of a disposable checkout on branch `{branch}`.
 
 A teammate reported:
 ---
@@ -52,17 +52,21 @@ A teammate reported:
 ---
 
 Rules:
-- Find the root cause, then fix it in `src/`. Do not modify tests. Do not modify anything outside `demo/orders`.
-- Run the full test suite and make it pass. The reported failing test is part of it.
+- Find the root cause, then fix it. Do not modify tests. Do not modify anything outside `{workdir}`.
+- The project's test command is: `{test}`
+- Run the full suite and make it pass. The reported failing test is part of it.
 - Do not commit, push, or open a pull request. The harness does that.
 - End your reply with a line `SUMMARY:` followed by two or three sentences: root cause, the change, and the test result.
-"#
+"#,
+            workdir = self.config.workdir,
+            branch = branch,
+            test = self.config.test_command.join(" "),
         )
     }
 
     fn revise_prompt(&self, receipt: &crate::ledger::Receipt, branch: &str) -> String {
         format!(
-            r#"You are the fixer in a team room called "checkout-incidents". You are working in the Rust crate `demo/orders` of a disposable checkout on branch `{branch}`.
+            r#"You are the fixer in a team room called "checkout-incidents". You are working in `{workdir}` of a disposable checkout on branch `{branch}`.
 
 An independent verifier rejected a previous proposal. Its receipt:
 
@@ -75,17 +79,20 @@ Failing output:
 
 Rules:
 - Start from the current branch. The previous attempt is already applied.
-- Fix the failure. Do not weaken, delete, or edit the tests. Do not modify anything outside `demo/orders`.
-- Run the full test suite until it passes.
+- Fix the failure. Do not weaken, delete, or edit the tests. Do not modify anything outside `{workdir}`.
+- The project's test command is: `{test}`
+- Run the full suite until it passes.
 - Do not commit, push, or open a pull request. The harness does that.
 - End your reply with a line `SUMMARY:` followed by two or three sentences: what the verifier caught, what you changed, and the test result.
 "#,
+            workdir = self.config.workdir,
             branch = branch,
             reason = receipt
                 .reason
                 .clone()
                 .unwrap_or_else(|| "The suite failed.".to_string()),
             output = tail(&receipt.suite_output, 6000),
+            test = self.config.test_command.join(" "),
         )
     }
 
@@ -135,7 +142,11 @@ Rules:
     }
 
     async fn run_agent(&self, checkout: &Path, prompt: String) -> Result<crate::process::CommandOutput> {
-        let crate_dir = checkout.join("demo/orders");
+        let crate_dir = if self.config.workdir == "." {
+            checkout.to_path_buf()
+        } else {
+            checkout.join(&self.config.workdir)
+        };
         let summary_path = self
             .config
             .repo
@@ -217,8 +228,18 @@ Rules:
             bail!("could not open a branch worktree: {}", added.tail(600));
         }
 
-        let target = wt.join("demo/orders");
-        let _ = std::fs::remove_dir_all(&target);
+        let relative = self.config.workdir.trim_end_matches('/');
+        let whole = relative.is_empty() || relative == ".";
+        let target = if whole { wt.clone() } else { wt.join(relative) };
+        if !whole {
+            let _ = std::fs::remove_dir_all(&target);
+        }
+        let source = if whole {
+            format!("{}/", checkout.to_string_lossy())
+        } else {
+            format!("{}/", checkout.join(relative).to_string_lossy())
+        };
+        let destination = format!("{}/", target.to_string_lossy());
         let synced = run(
             "rsync",
             &[
@@ -226,11 +247,17 @@ Rules:
                 "--exclude".to_string(),
                 "target".to_string(),
                 "--exclude".to_string(),
+                ".git".to_string(),
+                "--exclude".to_string(),
+                ".worktrees".to_string(),
+                "--exclude".to_string(),
+                ".countersign".to_string(),
+                "--exclude".to_string(),
                 ".opencode".to_string(),
                 "--exclude".to_string(),
                 ".codex".to_string(),
-                format!("{}/", checkout.join("demo/orders").to_string_lossy()),
-                format!("{}/", target.to_string_lossy()),
+                source,
+                destination,
             ],
             &self.config.repo,
             &[],
@@ -242,14 +269,14 @@ Rules:
             bail!("could not assemble the branch: {}", synced.tail(600));
         }
 
+        let mut status_args = vec!["status".to_string(), "--porcelain".to_string()];
+        if !whole {
+            status_args.push("--".to_string());
+            status_args.push(relative.to_string());
+        }
         let status = run(
             "git",
-            &[
-                "status".to_string(),
-                "--porcelain".to_string(),
-                "--".to_string(),
-                "demo/orders".to_string(),
-            ],
+            &status_args,
             &wt,
             &[],
             Duration::from_secs(30),
@@ -260,14 +287,13 @@ Rules:
             return Ok(None);
         }
 
-        let added_files = run(
-            "git",
-            &["add".to_string(), "demo/orders".to_string()],
-            &wt,
-            &[],
-            Duration::from_secs(30),
-        )
-        .await?;
+        let mut add_args = vec!["add".to_string()];
+        if whole {
+            add_args.push("-A".to_string());
+        } else {
+            add_args.push(relative.to_string());
+        }
+        let added_files = run("git", &add_args, &wt, &[], Duration::from_secs(30)).await?;
         if !added_files.success {
             let _ = cleanup_worktree(&self.config.repo, &wt_string).await;
             bail!("git add failed: {}", added_files.tail(500));

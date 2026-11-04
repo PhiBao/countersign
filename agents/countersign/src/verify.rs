@@ -486,6 +486,7 @@ mod tests {
             role_name: Some("verifier".into()),
             room_id: None,
             viewer_url: None,
+            workdir: ".".into(),
             allowed_paths: vec!["demo/orders/src".into()],
             denied_paths: vec!["demo/orders/tests".into()],
             test_command: vec![

@@ -143,6 +143,25 @@ impl SwitchClient {
             .await
     }
 
+    pub async fn create_room_document(
+        &self,
+        name: &str,
+        description: &str,
+        instructions: &str,
+        content: &str,
+    ) -> Result<Value> {
+        self.call_attached(
+            "create_room_document",
+            json!({
+                "name": name,
+                "description": description,
+                "instructions": instructions,
+                "content": content,
+            }),
+        )
+        .await
+    }
+
     pub async fn list_participants(&self) -> Result<Vec<Value>> {
         let value = self.call_attached("list_participants", json!({})).await?;
         Ok(value.as_array().cloned().unwrap_or_default())
