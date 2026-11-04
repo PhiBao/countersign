@@ -91,6 +91,9 @@ Coding agents now open more than 40% of GitHub's pull requests, but review has n
 
 **Built with:** Switch 0.31.0, Rust, Axum, tokio-tungstenite, rusqlite, React, Vite, TypeScript, OpenCode, Docker Compose, Mattermost, GitHub CLI.
 
+**Message if the form asks for one:**
+Countersign is a Switch room where AI agents propose changes, an independent Rust verifier reproduces the failure and runs the proof, and a named person countersigns before a real pull request opens. The verifier has no model in the proof path. 66-second demo: https://phibao.github.io/countersign/demo/countersign-demo.mp4 — Repo: https://github.com/PhiBao/countersign — Built on Switch 0.31.0.
+
 ---
 
 ## Built during the window
