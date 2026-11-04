@@ -158,7 +158,7 @@ async function clip(name, prepare, holdMs = 5000) {
 
 const manifest = { clips: [], failReceipt: null, receipt: null };
 
-// 1. Ask for a verification.
+// 1. Ask for a verification of the plausible hotfix.
 manifest.clips.push({
   name: "01-request-fail",
   file: await clip(
@@ -187,21 +187,23 @@ manifest.clips.push({
   ),
 });
 
-// 3. Ask the fixer for the real fix.
+// 3. The verifier hands the failure back; the fixer starts a revision.
+await waitForPost("Revising from", 180000);
 manifest.clips.push({
-  name: "03-request-fix",
+  name: "03-revise",
   file: await clip(
-    "03-request-fix",
+    "03-revise",
     async (page) => {
       await openRoom(page);
-      await send(page, REPORT);
+      await focusPost(page, "@fixer revise");
+      await sleep(1500);
     },
-    4500,
+    6000,
   ),
 });
 
-// 4. The proposal.
-await waitForPost("Proposed fix ·");
+// 4. The retry proposal.
+await waitForPost("Proposed fix ·", 240000);
 manifest.clips.push({
   name: "04-proposal",
   file: await clip(
@@ -215,7 +217,7 @@ manifest.clips.push({
   ),
 });
 
-// 5. The PASS receipt.
+// 5. The chained PASS receipt.
 const pass = await waitForPost("PASS ·", 6 * 60 * 1000);
 manifest.receipt = (pass.message.match(/R-[A-F0-9]{6}/) || [])[0] || null;
 if (!manifest.receipt) throw new Error("no PASS receipt id");
@@ -228,11 +230,11 @@ manifest.clips.push({
       await focusPost(page, "PASS ·");
       await sleep(2000);
     },
-    6500,
+    7000,
   ),
 });
 
-// 6. Countersign.
+// 6. The approver signs.
 manifest.clips.push({
   name: "06-countersign",
   file: await clip(
@@ -245,7 +247,7 @@ manifest.clips.push({
   ),
 });
 
-// 7. Landed.
+// 7. The verified commit lands.
 await waitForPost("LANDED", 2 * 60 * 1000);
 manifest.clips.push({
   name: "07-landed",
@@ -260,14 +262,19 @@ manifest.clips.push({
   ),
 });
 
-// 8. The proof ledger.
+// 8. The proof ledger, with the diff open.
 manifest.clips.push({
   name: "08-ledger",
   file: await clip(
     "08-ledger",
     async (page) => {
       await page.goto(VIEWER_URL, { waitUntil: "domcontentloaded" });
-      await sleep(3000);
+      await sleep(2500);
+      const diff = page.getByText("+ show diff").first();
+      if (await diff.count()) {
+        await diff.click();
+        await sleep(1500);
+      }
       await page.mouse.move(960, 540);
       await page.mouse.wheel(0, 420);
       await sleep(2500);

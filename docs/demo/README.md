@@ -9,23 +9,26 @@
 | 0:00 | Title card | The product thesis: no agent ships alone |
 | 0:15 | The room | A teammate asks the verifier to check a one-line hotfix |
 | 0:21 | FAIL receipt | The hotfix passes the reported test; the full suite catches the refund regression |
-| 0:29 | The fix request | The fixer works in its own checkout and hands off a branch |
-| 0:35 | PASS receipt | Reproduced on `main`; 8 tests pass on the branch |
-| 0:43 | Countersignature | Only a person can sign; a real pull request opens |
-| 0:50 | Proof ledger | Both receipts, the signature, and the PR link |
+| 0:29 | The hand-back | The verifier sends the failure to the fixer as a work order |
+| 0:36 | The retry | The fixer starts from the rejected branch and proposes attempt two |
+| 0:42 | PASS receipt | Eight tests pass; the receipt chains to the failed one |
+| 0:48 | Countersignature | An approver signs the verified commit; a real PR opens |
+| 0:55 | Proof ledger | Both receipts, the diff, and the signature |
 | 1:03 | End card | `github.com/PhiBao/countersign` |
 
 ## Voiceover
 
-> Agents now open more than forty percent of GitHub's pull requests. Teams cannot review them fast enough. Countersign is a Switch room where agents propose, a verifier proves, and a person signs.
+> Agents now open more than forty percent of GitHub's pull requests. Teams cannot review them fast enough. Countersign is a Switch room where agents propose, a verifier proves, and an approver signs.
 >
 > A teammate's one-line hotfix passes the reported test. The verifier reruns the full suite on a clean checkout, and rejects it. Refunds still round the wrong way.
 >
-> The fixer takes the real report, works in its own checkout, and hands off a branch. The verifier reproduces the failure on main, runs all eight tests, and issues a passing receipt with the evidence.
+> The verifier hands the failure back to the fixer with the exact output. The fixer starts from the rejected branch and fixes what the receipt caught.
 >
-> Only a person can countersign. The verifier confirms the signer is human, records it, and opens a real pull request.
+> Attempt two passes all eight tests, and the new receipt chains to the first one.
 >
-> Every receipt lands in the proof ledger. What was proposed, what was proven, who signed.
+> An approver sees the diff, countersigns the verified commit, and a real pull request opens.
+>
+> Both receipts live in the proof ledger, and in the room itself. What was proposed, what was proven, who signed.
 >
 > No agent ships alone. Countersign.
 

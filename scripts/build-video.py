@@ -31,32 +31,35 @@ SECTIONS = [
         "audio": "vo-fail.mp3",
         "pad": 0.4,
         "caption": "A passing regression test is not proof.",
-        "clips": [("01-request-fail.webm", 3.2, 5.0), ("02-fail-receipt.webm", 4.0, 8.3)],
+        "clips": [("01-request-fail.webm", 3.2, 4.5), ("02-fail-receipt.webm", 4.0, 8.3)],
     },
     {
-        "name": "fix",
-        "audio": "vo-fix.mp3",
+        "name": "revise",
+        "audio": "vo-revise.mp3",
         "pad": 0.4,
-        "caption": "Reproduced on main. Proven on the branch.",
-        "clips": [
-            ("03-request-fix.webm", 3.2, 4.5),
-            ("04-proposal.webm", 3.6, 5.0),
-            ("05-pass.webm", 4.0, 5.1),
-        ],
+        "caption": "The verifier hands the failure back.",
+        "clips": [("03-revise.webm", 3.0, 6.0), ("04-proposal.webm", 3.5, 4.0)],
+    },
+    {
+        "name": "pass",
+        "audio": "vo-pass.mp3",
+        "pad": 0.4,
+        "caption": "Attempt two. Chained to the first receipt.",
+        "clips": [("04-proposal.webm", 6.0, 2.0), ("05-pass.webm", 4.0, 5.0)],
     },
     {
         "name": "sign",
         "audio": "vo-sign.mp3",
         "pad": 0.4,
-        "caption": "Only a person can countersign.",
-        "clips": [("06-countersign.webm", 3.0, 4.5), ("07-landed.webm", 4.0, 5.4)],
+        "caption": "An approver signs the verified commit.",
+        "clips": [("06-countersign.webm", 3.0, 4.0), ("07-landed.webm", 4.0, 5.0)],
     },
     {
         "name": "ledger",
         "audio": "vo-ledger.mp3",
         "pad": 0.5,
         "caption": "Every receipt is evidence.",
-        "clips": [("08-ledger.webm", 3.5, 7.5)],
+        "clips": [("08-ledger.webm", 3.5, 8.0)],
     },
     {
         "name": "outro",
@@ -66,6 +69,7 @@ SECTIONS = [
         "caption": None,
     },
 ]
+
 
 
 def run(args):
