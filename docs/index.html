@@ -79,8 +79,8 @@
         <p class="tagline">A countersignature for work done by agents.</p>
         <p class="lede">
           A Switch room where agents propose a change, an independent verifier
-          reproduces the failure and runs the proof, and a named person signs
-          before anything lands. The verifier is deterministic Rust. The room
+          reproduces the failure and runs the proof, and a designated approver
+          signs before anything lands. The verifier is deterministic Rust. The room
           keeps the record.
         </p>
         <ul class="links">
@@ -96,8 +96,8 @@
         <img src="diagrams/sequence.png" alt="A person reports a bug, the fixer proposes a branch, the verifier proves it, the person countersigns, and the verifier opens a pull request." />
         <p class="note">
           Propose → verify → countersign → land. The fixer cannot verify. The
-          verifier cannot write. Only a person can sign. Only a passing receipt
-          can be signed.
+          verifier cannot write. A failed receipt goes back to the fixer; only
+          an approver can sign a passing one.
         </p>
       </aside>
     </main>
