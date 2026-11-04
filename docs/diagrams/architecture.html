@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Countersign architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --paper: #f4f1e8;
+      --ink: #141312;
+      --muted: #6f695d;
+      --soft: #9a9385;
+      --rule: #d9d2c2;
+      --accent: #d9481c;
+      --sans: "Space Grotesk", system-ui, sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1120px; width: 100%; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 0.64rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.6rem;
+    }
+    h1 {
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 600;
+      letter-spacing: -0.035em;
+      line-height: 1.1;
+      margin-bottom: 0.4rem;
+    }
+    .lede {
+      font-size: 0.86rem;
+      color: var(--muted);
+      margin-bottom: 1.75rem;
+      max-width: 70ch;
+    }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · Countersign</p>
+    <h1>The room is the control plane. The verifier is the proof.</h1>
+    <p class="lede">Everything a team does with a change — report it, propose it, prove it, sign it — happens in one Switch room. The ledger is the room's index, not a second source of truth.</p>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 960 520" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="countersign-arch-title countersign-arch-desc">
+        <title id="countersign-arch-title">Countersign architecture</title>
+        <desc id="countersign-arch-desc">A person, a Switch room, a fixer agent, a deterministic verifier, a git worktree, GitHub, and the ledger viewer, with the room as the shared control plane.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#6f695d" />
+          </marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#d9481c" />
+          </marker>
+          <marker id="arrow-ink" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#141312" />
+          </marker>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f4f1e8" />
+
+        <!-- ── arrows first ─────────────────────────────────────── -->
+
+        <!-- person -> room : report -->
+        <line x1="200" y1="246" x2="250" y2="246" stroke="#6f695d" stroke-width="1.2" marker-end="url(#arrow)" />
+        <!-- room -> person : receipt / landed -->
+        <line x1="262" y1="282" x2="212" y2="282" stroke="#6f695d" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)" />
+
+        <!-- room -> fixer : task -->
+        <path d="M 330,222 V 190 H 510" fill="none" stroke="#6f695d" stroke-width="1.2" marker-end="url(#arrow)" />
+        <!-- fixer -> room : branch + proposal -->
+        <path d="M 660,172 V 202 H 404 V 220" fill="none" stroke="#6f695d" stroke-width="1.2" marker-end="url(#arrow)" />
+
+        <!-- room -> verifier : verify -->
+        <line x1="458" y1="302" x2="510" y2="302" stroke="#6f695d" stroke-width="1.2" marker-end="url(#arrow)" />
+        <!-- verifier -> room : receipt -->
+        <line x1="520" y1="320" x2="466" y2="320" stroke="#6f695d" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)" />
+
+        <!-- verifier -> worktree : reproduce + suite -->
+        <path d="M 700,332 H 736 V 122 H 768" fill="none" stroke="#141312" stroke-width="1.2" marker-end="url(#arrow-ink)" />
+        <!-- verifier -> github : open PR after countersign -->
+        <path d="M 700,356 H 748 V 208 H 768" fill="none" stroke="#6f695d" stroke-width="1.2" marker-end="url(#arrow)" />
+        <!-- verifier -> ledger : receipt index -->
+        <line x1="700" y1="380" x2="768" y2="380" stroke="#6f695d" stroke-width="1.2" marker-end="url(#arrow)" />
+
+        <!-- ── nodes ────────────────────────────────────────────── -->
+
+        <!-- person -->
+        <rect x="48" y="238" width="152" height="72" rx="6" fill="#f4f1e8" stroke="#141312" stroke-width="1.2" />
+        <text x="124" y="266" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="14" font-weight="600" fill="#141312">Person</text>
+        <text x="124" y="286" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#6f695d">reports · countersigns</text>
+
+        <!-- switch room (focal) -->
+        <rect x="262" y="222" width="196" height="104" rx="6" fill="#fbf8f0" stroke="#d9481c" stroke-width="2" />
+        <rect x="274" y="234" width="60" height="12" rx="2" fill="#d9481c" />
+        <text x="304" y="243" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="7.5" letter-spacing="0.12em" fill="#f4f1e8">ROOM</text>
+        <text x="360" y="268" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="14" font-weight="600" fill="#141312">Switch room</text>
+        <text x="360" y="288" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#6f695d">log · roles · addressing</text>
+        <text x="360" y="304" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#6f695d">the permanent record</text>
+
+        <!-- fixer -->
+        <rect x="520" y="96" width="180" height="76" rx="6" fill="#f4f1e8" stroke="#141312" stroke-width="1.2" />
+        <text x="610" y="124" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="14" font-weight="600" fill="#141312">Fixer</text>
+        <text x="610" y="144" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#6f695d">OpenCode · proposes only</text>
+        <text x="610" y="158" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#6f695d">never verifies, never lands</text>
+
+        <!-- verifier -->
+        <rect x="520" y="300" width="180" height="96" rx="6" fill="#f4f1e8" stroke="#141312" stroke-width="1.2" />
+        <text x="610" y="328" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="14" font-weight="600" fill="#141312">Verifier</text>
+        <text x="610" y="348" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#6f695d">Rust · zero model calls</text>
+        <text x="610" y="362" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#6f695d">reproduces · runs the suite</text>
+        <text x="610" y="376" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#6f695d">refuses edited tests</text>
+
+        <!-- worktree -->
+        <rect x="768" y="88" width="152" height="68" rx="6" fill="#f4f1e8" stroke="#141312" stroke-width="1.2" />
+        <text x="844" y="114" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="13" font-weight="600" fill="#141312">Clean worktree</text>
+        <text x="844" y="134" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#6f695d">main → branch</text>
+
+        <!-- github -->
+        <rect x="768" y="174" width="152" height="68" rx="6" fill="#f4f1e8" stroke="#141312" stroke-width="1.2" />
+        <text x="844" y="200" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="13" font-weight="600" fill="#141312">GitHub</text>
+        <text x="844" y="220" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#6f695d">pull request</text>
+
+        <!-- ledger -->
+        <rect x="768" y="336" width="152" height="88" rx="6" fill="#f4f1e8" stroke="#141312" stroke-width="1.2" />
+        <text x="844" y="362" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="13" font-weight="600" fill="#141312">Ledger + viewer</text>
+        <text x="844" y="382" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#6f695d">receipts · evidence</text>
+        <text x="844" y="396" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="9" fill="#6f695d">served by Rust</text>
+
+        <!-- ── labels (masks first) ─────────────────────────────── -->
+
+        <rect x="150" y="220" width="52" height="12" fill="#f4f1e8" />
+        <text x="176" y="229" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="7.5" letter-spacing="0.1em" fill="#6f695d">REPORT</text>
+
+        <rect x="206" y="264" width="46" height="12" fill="#f4f1e8" />
+        <text x="229" y="273" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="7.5" letter-spacing="0.1em" fill="#6f695d">REPLY</text>
+
+        <rect x="330" y="176" width="38" height="12" fill="#f4f1e8" />
+        <text x="349" y="185" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="7.5" letter-spacing="0.1em" fill="#6f695d">TASK</text>
+
+        <rect x="432" y="192" width="66" height="12" fill="#f4f1e8" />
+        <text x="465" y="201" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="7.5" letter-spacing="0.1em" fill="#6f695d">PROPOSAL</text>
+
+        <rect x="458" y="290" width="44" height="12" fill="#f4f1e8" />
+        <text x="480" y="296" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="7.5" letter-spacing="0.1em" fill="#6f695d">VERIFY</text>
+
+        <rect x="466" y="326" width="50" height="12" fill="#f4f1e8" />
+        <text x="491" y="335" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="7.5" letter-spacing="0.1em" fill="#6f695d">RECEIPT</text>
+
+        <!-- ── footnote ─────────────────────────────────────────── -->
+
+        <line x1="48" y1="456" x2="912" y2="456" stroke="#d9d2c2" stroke-width="1" />
+        <text x="48" y="476" font-family="'IBM Plex Mono', monospace" font-size="8" fill="#6f695d">Removing Switch removes the control plane: no roles, no addressing policy, no shared record to verify against.</text>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

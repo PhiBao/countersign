@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Countersign sequence</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --paper: #f4f1e8;
+      --ink: #141312;
+      --muted: #6f695d;
+      --rule: #d9d2c2;
+      --accent: #d9481c;
+      --sans: "Space Grotesk", system-ui, sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, monospace;
+    }
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1120px; width: 100%; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 0.64rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.6rem;
+    }
+    h1 {
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 600;
+      letter-spacing: -0.035em;
+      line-height: 1.1;
+      margin-bottom: 0.4rem;
+    }
+    .lede {
+      font-size: 0.86rem;
+      color: var(--muted);
+      margin-bottom: 1.75rem;
+      max-width: 72ch;
+    }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Sequence · Countersign</p>
+    <h1>Propose, prove, countersign, land.</h1>
+    <p class="lede">Two agents and a person finish one change. The fixer cannot verify. The verifier cannot write. Only a person can countersign — and only a passing receipt can be countersigned.</p>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="countersign-seq-title countersign-seq-desc">
+        <title id="countersign-seq-title">Countersign sequence</title>
+        <desc id="countersign-seq-desc">A person reports a bug, the fixer proposes a branch, the verifier reproduces the failure and runs the suite, the person countersigns a passing receipt, and the verifier opens a pull request.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#6f695d" />
+          </marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#d9481c" />
+          </marker>
+          <marker id="arrow-ink" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#141312" />
+          </marker>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f4f1e8" />
+
+        <!-- ── lifelines ───────────────────────────────────────── -->
+
+        <line x1="150" y1="84" x2="150" y2="540" stroke="rgba(20,19,18,0.18)" stroke-width="1" stroke-dasharray="3,3" />
+        <line x1="370" y1="84" x2="370" y2="540" stroke="rgba(20,19,18,0.18)" stroke-width="1" stroke-dasharray="3,3" />
+        <line x1="600" y1="84" x2="600" y2="540" stroke="rgba(20,19,18,0.18)" stroke-width="1" stroke-dasharray="3,3" />
+        <line x1="820" y1="84" x2="820" y2="540" stroke="rgba(20,19,18,0.18)" stroke-width="1" stroke-dasharray="3,3" />
+
+        <!-- ── activation bars ──────────────────────────────────── -->
+
+        <rect x="366" y="140" width="8" height="56" fill="rgba(20,19,18,0.06)" stroke="#6f695d" stroke-width="0.8" />
+        <rect x="596" y="196" width="8" height="274" fill="rgba(20,19,18,0.06)" stroke="#6f695d" stroke-width="0.8" />
+        <rect x="816" y="470" width="8" height="50" fill="rgba(20,19,18,0.06)" stroke="#6f695d" stroke-width="0.8" />
+
+        <!-- ── messages ─────────────────────────────────────────── -->
+
+        <!-- report -->
+        <line x1="158" y1="140" x2="360" y2="140" stroke="#6f695d" stroke-width="1.2" marker-end="url(#arrow)" />
+        <!-- propose + handoff -->
+        <line x1="378" y1="196" x2="590" y2="196" stroke="#6f695d" stroke-width="1.2" marker-end="url(#arrow)" />
+
+        <!-- verifier works: self-message -->
+        <path d="M 600,250 H 660 V 290 H 608" fill="none" stroke="#141312" stroke-width="1.2" marker-end="url(#arrow-ink)" />
+
+        <!-- receipt -->
+        <line x1="592" y1="350" x2="160" y2="350" stroke="#6f695d" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)" />
+
+        <!-- countersign (focal) -->
+        <line x1="158" y1="410" x2="590" y2="410" stroke="#d9481c" stroke-width="1.6" marker-end="url(#arrow-accent)" />
+
+        <!-- open PR -->
+        <line x1="608" y1="470" x2="810" y2="470" stroke="#141312" stroke-width="1.2" marker-end="url(#arrow-ink)" />
+
+        <!-- PR link back -->
+        <line x1="812" y1="520" x2="160" y2="520" stroke="#6f695d" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)" />
+
+        <!-- ── actors ───────────────────────────────────────────── -->
+
+        <rect x="72" y="36" width="156" height="48" rx="6" fill="#f4f1e8" stroke="#141312" stroke-width="1.2" />
+        <text x="150" y="58" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="14" font-weight="600" fill="#141312">Person</text>
+        <text x="150" y="74" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="8.5" fill="#6f695d">the only signer</text>
+
+        <rect x="292" y="36" width="156" height="48" rx="6" fill="#f4f1e8" stroke="#141312" stroke-width="1.2" />
+        <text x="370" y="58" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="14" font-weight="600" fill="#141312">Fixer</text>
+        <text x="370" y="74" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="8.5" fill="#6f695d">OpenCode</text>
+
+        <rect x="522" y="36" width="156" height="48" rx="6" fill="#f4f1e8" stroke="#141312" stroke-width="1.2" />
+        <text x="600" y="58" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="14" font-weight="600" fill="#141312">Verifier</text>
+        <text x="600" y="74" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="8.5" fill="#6f695d">Rust · deterministic</text>
+
+        <rect x="742" y="36" width="156" height="48" rx="6" fill="#f4f1e8" stroke="#141312" stroke-width="1.2" />
+        <text x="820" y="58" text-anchor="middle" font-family="'Space Grotesk', sans-serif" font-size="14" font-weight="600" fill="#141312">GitHub</text>
+        <text x="820" y="74" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="8.5" fill="#6f695d">pull request</text>
+
+        <!-- ── labels (mask, then text) ─────────────────────────── -->
+
+        <rect x="168" y="126" width="152" height="12" fill="#f4f1e8" />
+        <text x="244" y="135" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="7.5" letter-spacing="0.1em" fill="#6f695d">REPORT THE REFUND BUG</text>
+
+        <rect x="386" y="182" width="170" height="12" fill="#f4f1e8" />
+        <text x="471" y="191" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="7.5" letter-spacing="0.1em" fill="#6f695d">HANDOFF · fix/half-cent</text>
+
+        <text x="670" y="264" font-family="'IBM Plex Mono', monospace" font-size="8" fill="#6f695d">reproduce on main</text>
+        <text x="670" y="278" font-family="'IBM Plex Mono', monospace" font-size="8" fill="#6f695d">run the full suite</text>
+
+        <rect x="168" y="336" width="166" height="12" fill="#f4f1e8" />
+        <text x="251" y="345" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="7.5" letter-spacing="0.1em" fill="#6f695d">PASS RECEIPT · R-XXXX</text>
+
+        <rect x="168" y="396" width="140" height="12" fill="#f4f1e8" />
+        <text x="238" y="405" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="7.5" letter-spacing="0.1em" fill="#d9481c">COUNTERSIGN R-XXXX</text>
+
+        <rect x="618" y="456" width="72" height="12" fill="#f4f1e8" />
+        <text x="654" y="465" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="7.5" letter-spacing="0.1em" fill="#6f695d">OPEN PR</text>
+
+        <rect x="700" y="506" width="110" height="12" fill="#f4f1e8" />
+        <text x="755" y="515" text-anchor="middle" font-family="'IBM Plex Mono', monospace" font-size="7.5" letter-spacing="0.1em" fill="#6f695d">PR LINK IN ROOM</text>
+
+        <!-- ── footnote ─────────────────────────────────────────── -->
+
+        <line x1="72" y1="556" x2="912" y2="556" stroke="#d9d2c2" stroke-width="1" />
+        <text x="72" y="576" font-family="'IBM Plex Mono', monospace" font-size="8" fill="#6f695d">Every arrow is a Switch room message. The room log is the permanent record; the ledger is its index.</text>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

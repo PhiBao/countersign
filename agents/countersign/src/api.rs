@@ -13,7 +13,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::ledger::{Ledger, Receipt, Verdict};
+use crate::ledger::{Ledger, Receipt};
 
 #[derive(Clone)]
 struct ApiState {
@@ -127,9 +127,3 @@ pub async fn serve(ledger: Ledger, port: u16, viewer_dir: PathBuf) -> Result<()>
     Ok(())
 }
 
-pub fn verdictmark(receipt: &Receipt) -> &'static str {
-    match receipt.verdict {
-        Verdict::Pass => "PASS",
-        Verdict::Fail => "FAIL",
-    }
-}

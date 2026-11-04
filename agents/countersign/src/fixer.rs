@@ -73,7 +73,6 @@ Rules:
         let slug = slugify(report);
         let branch = format!("fix/{slug}-{id}");
         let checkout = std::env::temp_dir().join(format!("countersign-fix-{id}"));
-        let checkout_string = checkout.to_string_lossy().to_string();
 
         self.client
             .post_message(

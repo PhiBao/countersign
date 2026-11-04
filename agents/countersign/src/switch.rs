@@ -36,11 +36,7 @@ pub struct IncomingMessage {
     pub room_id: String,
     pub sender: String,
     pub sender_name: String,
-    pub sender_kind: Option<String>,
     pub body: String,
-    pub message_id: String,
-    pub thread_id: Option<String>,
-    pub addressed: bool,
 }
 
 #[async_trait]
@@ -261,13 +257,11 @@ impl SwitchClient {
                         warn!("agent is not a member of any room yet");
                         continue;
                     }
-                    let client = self.clone();
                     let handler = handler.clone();
                     tokio::spawn(async move {
                         if let Err(error) = handler.on_ready(rooms).await {
                             error!("ready handler failed: {error:#}");
                         }
-                        let _ = client;
                     });
                 }
                 "message" => {
@@ -318,25 +312,11 @@ impl SwitchClient {
                             .and_then(Value::as_str)
                             .unwrap_or("someone")
                             .to_string(),
-                        sender_kind: payload
-                            .get("sender_kind")
-                            .and_then(Value::as_str)
-                            .map(str::to_string),
                         body: payload
                             .get("body")
                             .and_then(Value::as_str)
                             .unwrap_or_default()
                             .to_string(),
-                        message_id: payload
-                            .get("message_id")
-                            .and_then(Value::as_str)
-                            .unwrap_or_default()
-                            .to_string(),
-                        thread_id: payload
-                            .get("thread_id")
-                            .and_then(Value::as_str)
-                            .map(str::to_string),
-                        addressed,
                     };
                     let handler = handler.clone();
                     tokio::spawn(async move {
@@ -382,4 +362,24 @@ pub fn strip_mention(body: &str) -> String {
         trimmed
     };
     without.trim_start_matches([':', ',', ' ']).trim().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_mention;
+
+    #[test]
+    fn strips_a_leading_role_mention() {
+        assert_eq!(strip_mention("@verifier verify fix/x"), "verify fix/x");
+    }
+
+    #[test]
+    fn strips_a_mention_with_punctuation() {
+        assert_eq!(strip_mention("@fixer: fix the bug"), "fix the bug");
+    }
+
+    #[test]
+    fn leaves_plain_text_alone() {
+        assert_eq!(strip_mention("  ledger  "), "ledger");
+    }
 }
