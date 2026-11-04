@@ -98,7 +98,7 @@
 <p>Most agent-in-chat setups make this worse in a subtle way: the agent that wrote the change is also the one reporting whether it works. It runs the tests in a terminal only it can see, summarizes the result, and asks a person to believe the summary. The agent grades its own homework, and the room has no way to tell.</p>
 <p><a href="https://github.com/PhiBao/countersign">Countersign</a> is my answer to that, built for the Flip the Switch Hackathon. The rule is structural:</p>
 <blockquote>
-<p><strong>The proposer cannot verify. The verifier cannot write. Only a person can countersign. Only a passing receipt can be countersigned.</strong></p>
+<p><strong>The proposer cannot verify. The verifier cannot write. Only an approver can countersign. Only a passing receipt can be countersigned.</strong></p>
 </blockquote>
 <p>This post is about why that shape matters, how Switch made it possible, and the sharp edges I hit while building it — so the next person building a Switch workflow can skip them.</p>
 <hr />
@@ -117,9 +117,12 @@
 <p>One room, two agents, one person:</p>
 <pre><code>Person        reports the failing refund total
 Fixer         proposes a branch in its own checkout
-Verifier      reproduces the failure on main, runs the full suite on the branch,
+Verifier      reproduces the failure on the base, runs the full suite on the branch,
               refuses branches that edit their own tests, issues a receipt
-Person        countersigns the passing receipt
+Verifier      on failure, hands the receipt back to the fixer as a work order
+Fixer         starts from the rejected branch and fixes what the receipt caught
+Verifier      verifies attempt two and chains the new receipt to the first
+Approver      countersigns the passing, pinned commit
 Verifier      opens the pull request (or merges locally)
 </code></pre>
 <p>The fixer is <strong>OpenCode</strong>, an existing coding agent, driven in a disposable copy of the repository. The verifier is <strong>deterministic Rust</strong> — no model calls in the proof path.</p>
@@ -127,21 +130,22 @@ Verifier      opens the pull request (or merges locally)
 <h3>The receipt</h3>
 <p>Every verification produces a receipt:</p>
 <ul>
-<li>the branch and commit SHA,</li>
-<li>the changed files,</li>
-<li>the exact command output from reproducing the failure on <code>main</code>,</li>
+<li>the branch, commit SHA, and the base SHA it was verified against,</li>
+<li>the changed files, the diffstat, and the full diff,</li>
+<li>the exact command output from reproducing the failure on the base,</li>
 <li>the exact output from the full suite on the branch,</li>
+<li>the attempt number and the receipt it supersedes,</li>
 <li>a verdict and a duration.</li>
 </ul>
 <p>The receipt is posted to the room and stored in a SQLite ledger. The room is the permanent record; the ledger is its index.</p>
-<p>A person replies <code>@verifier countersign R-XXXXXX</code>. The verifier resolves the sender through the room&rsquo;s participant list and requires a <strong>human</strong>. An agent&rsquo;s countersignature is refused. Only then does it push the branch and open a pull request with the receipt in the body. If landing fails, the receipt stays unsigned.</p>
+<p>An approver replies <code>@verifier countersign R-XXXXXX</code>. The verifier resolves the sender through the room&rsquo;s participant list and requires a <strong>human</strong> from the configured approver list. An agent&rsquo;s countersignature is refused. Before any irreversible action it re-checks that the branch still points at the verified commit and the base has not moved. Only then does it push that exact commit and open a pull request with the receipt and diffstat in the body. If landing fails, the receipt stays unsigned.</p>
 <h3>The checks that make it a gate</h3>
 <p>The verifier is deliberately boring. Before it runs anything, it rejects a branch that touches its own tests (<code>demo/orders/tests/**</code>) or anything outside the fixture. Then:</p>
 <ol>
 <li>Create a clean worktree at <code>main</code>.</li>
 <li>Run the reported regression test. It <strong>must fail</strong> — otherwise the verifier refuses to certify a fix for a bug that is not there.</li>
 <li>Check out the branch in the same worktree.</li>
-<li>Run the <strong>full</strong> suite. It must pass.</li>
+<li>Run the <strong>full</strong> suite in a scrubbed environment. It must pass.</li>
 </ol>
 <p>A passing regression test is not proof. A branch that edits the test is not a fix. A fix for a bug that does not reproduce is not a fix. Each of those is a real failure mode, and each one produces a FAIL receipt rather than a green check.</p>
 <hr />
@@ -174,11 +178,14 @@ Verifier      opens the pull request (or merges locally)
 <li>Switch rooms, roles, addressing, and the log run on a self-hosted Switch 0.31.0 stack with bundled Mattermost.</li>
 <li>The verifier is a real protocol client, not the Console.</li>
 <li>The reproduction and test runs are real <code>git</code> and <code>cargo</code> invocations in a clean worktree.</li>
-<li>The countersignature is checked against the room&rsquo;s participants and refused for agents.</li>
-<li>The pull request is a real GitHub PR with the receipt in the body.</li>
+<li>The countersignature is checked against the room&rsquo;s participants and the approver list; agents are refused.</li>
+<li>Landing is pinned to the verified commit and base, so a moved branch is refused.</li>
+<li>A failed receipt becomes a fixer work order; the retry chains to the first receipt.</li>
+<li>Each receipt is also written as a Switch room document, listed by <code>!list-documents</code>.</li>
+<li>The pull request is a real GitHub PR with the receipt and diffstat in the body.</li>
 </ul>
 <p>The demo&rsquo;s bug is deliberately seeded: a half-cent rounding error in a checkout fixture. That is what makes the demo reproducible. The FAIL branch (<code>hotfix/naive-rounding</code>) is a real one-line fix that passes the reported test and fails the invariants. The verifier catches it for the right reason.</p>
-<p>The one honest limitation: the human check resolves the sender by room participant name, because Switch exposes client ids and participant ids in different namespaces. A production build should map the bridge identity to a Switch user id and sign receipts with a key. That is the next step, not a hidden assumption.</p>
+<p>The honest limitations: the human and approver checks resolve the sender by room participant name, because Switch exposes client ids and participant ids in different namespaces. <code>verify &lt;PR URL&gt;</code> supports same-repository PRs; fork PRs are refused because landing would push to the wrong remote. A production build should map the bridge identity to a Switch user id and sign receipts with a key. Those are next steps, not hidden assumptions.</p>
 <hr />
 <h2>Advice for the next Switch workflow</h2>
 <ul>
@@ -187,6 +194,8 @@ Verifier      opens the pull request (or merges locally)
 <li><strong>Set addressing policy deliberately.</strong> The default is owner-only. A colleague who cannot get an answer usually has not been admitted, not found a bug.</li>
 <li><strong>Pin the server version.</strong> <code>SWITCH_VERSION=0.31.0</code>. The protocol and Console are versioned separately.</li>
 <li><strong>Use the bundled Mattermost for the demo.</strong> No workspace admin, no OAuth app, no public URL. Connect Slack or Teams later.</li>
+<li><strong>Close the loop.</strong> A failure that only produces a red message is half a workflow. Hand the receipt back to the agent that can fix it, cap the attempts, and chain the receipts.</li>
+<li><strong>Pin the commit, not the branch name.</strong> The gap between &ldquo;verified&rdquo; and &ldquo;landed&rdquo; is where a verification product can quietly lie.</li>
 <li><strong>Do not build a chatbot and call it a workflow.</strong> The judges&rsquo; own guide says it: if one agent answering questions is the whole product, a webhook could have done it. Find the second job that has to happen somewhere else.</li>
 </ul>
 <hr />
