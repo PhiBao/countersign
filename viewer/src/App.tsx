@@ -159,7 +159,7 @@ function ReceiptSheet({ receipt, index }: { receipt: Receipt; index: number }) {
           <>
             <span className="signature-line" aria-hidden="true" />
             <p className="eyebrow awaiting">
-              {pass ? "Awaiting a person's countersignature" : "Not eligible"}
+              {pass ? "Awaiting a person's countersignature" : "Failed verification · nothing to sign"}
             </p>
           </>
         )}

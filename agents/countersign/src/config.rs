@@ -27,6 +27,7 @@ pub struct Config {
     pub ledger_path: PathBuf,
     pub role_name: Option<String>,
     pub room_id: Option<String>,
+    pub viewer_url: Option<String>,
     pub allowed_prefix: String,
     pub test_package: String,
     pub repro_test: String,
@@ -90,6 +91,7 @@ impl Config {
             ledger_path,
             role_name: env::var("COUNTERSIGN_ROLE_NAME").ok(),
             room_id: env::var("COUNTERSIGN_ROOM_ID").ok().filter(|id| !id.is_empty()),
+            viewer_url: env::var("COUNTERSIGN_VIEWER_URL").ok().filter(|url| !url.is_empty()),
             allowed_prefix: env::var("COUNTERSIGN_ALLOWED_PREFIX")
                 .unwrap_or_else(|_| "demo/orders/src".into()),
             test_package: env::var("COUNTERSIGN_TEST_PACKAGE")

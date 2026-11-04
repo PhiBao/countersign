@@ -97,7 +97,7 @@ impl Verifier {
         };
         self.ledger.insert(&receipt)?;
 
-        let text = format_receipt(&receipt);
+        let text = format_receipt(&receipt, self.config.viewer_url.as_deref());
         self.client.post_message(&message.room_id, &text).await?;
         Ok(())
     }
@@ -335,7 +335,7 @@ impl Handler for Verifier {
     }
 }
 
-fn format_receipt(receipt: &Receipt) -> String {
+fn format_receipt(receipt: &Receipt, viewer_url: Option<&str>) -> String {
     let short_sha = &receipt.commit_sha[..receipt.commit_sha.len().min(10)];
     let seconds = receipt.duration_ms as f64 / 1000.0;
     let files = receipt
@@ -344,6 +344,9 @@ fn format_receipt(receipt: &Receipt) -> String {
         .map(|file| format!("`{file}`"))
         .collect::<Vec<_>>()
         .join(", ");
+    let ledger = viewer_url
+        .map(|url| format!("\n\nFull evidence: {url}"))
+        .unwrap_or_default();
 
     match receipt.verdict {
         Verdict::Pass => {
@@ -351,17 +354,15 @@ fn format_receipt(receipt: &Receipt) -> String {
             format!(
                 "**✅ PASS · `{id}`** · `{branch}`\n\
                  Commit `{short_sha}` · {files} · {seconds:.1}s\n\n\
-                 Reproduced the reported failure on `{base}`, then the branch passed the full suite: **{summary}**.\n\n\
-                 To land it, a person replies **`@verifier countersign {id}`**. Agents cannot countersign.\n\n\
-                 <details><summary>Evidence</summary>\n\n```text\n{evidence}\n```\n</details>",
+                 Reproduced the reported failure on `main`; the branch passed the full suite: **{summary}**.\n\n\
+                 A person can land it: **`@verifier countersign {id}`**. Agents cannot countersign.{ledger}",
                 id = receipt.id,
                 branch = receipt.branch,
                 short_sha = short_sha,
                 files = files,
                 seconds = seconds,
-                base = "main",
                 summary = summary,
-                evidence = truncate(&receipt.base_output, 900),
+                ledger = ledger,
             )
         }
         Verdict::Fail => format!(
@@ -369,7 +370,7 @@ fn format_receipt(receipt: &Receipt) -> String {
              Commit `{short_sha}` · {files} · {seconds:.1}s\n\n\
              {reason}\n\n\
              ```text\n{evidence}\n```\n\n\
-             Nothing can land from a failed receipt. The fixer can propose a corrected branch.",
+             Nothing can land from a failed receipt.{ledger}",
             id = receipt.id,
             branch = receipt.branch,
             short_sha = short_sha,
@@ -385,8 +386,9 @@ fn format_receipt(receipt: &Receipt) -> String {
                 } else {
                     &receipt.suite_output
                 },
-                1200,
+                700,
             ),
+            ledger = ledger,
         ),
     }
 }
