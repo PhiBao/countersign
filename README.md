@@ -231,6 +231,8 @@ Nothing in the proof path is mocked. The only "fixture" is the bug itself, which
 - The **person** is the authority. The countersignature is checked against the room's participant list and refused for agents.
 - **Switch** is the identity and policy layer: roles, addressing policy, and the room log.
 
+**The fixer executes model-chosen commands.** It runs as a separate process on the operator's machine, in a disposable copy outside the repository, with no push credentials of its own. That is a strong *product* boundary — it cannot land, sign, or touch `main` — but it is not an OS sandbox. A production deployment must run the fixer in a container or a dedicated VM. The demo runs it locally for reproducibility, and the verifier is the layer that makes its output safe to accept.
+
 **What an attacker would try, and what happens.**
 
 | Attempt | Result |
@@ -290,6 +292,7 @@ Manual checks used before submission:
 - One room, one repository, one fixture at a time. The verifier is configured per deployment (`COUNTERSIGN_*`), not multi-tenant.
 - The human check is name-based (see Security). It fails closed on ambiguity, but a production system needs a bridge-identity mapping.
 - The fixer's diff depends on the model and the report. The verifier makes the outcome trustworthy, not the model deterministic.
+- The fixer is not OS-sandboxed; see the security note above.
 - The viewer and API are loopback-only and unauthenticated; they are a proof surface, not a multi-user dashboard.
 - `COUNTERSIGN_PR_MODE=local` produces a real merge on `countersign/landed`, not a PR. This is deliberate for offline reproduction and is labelled in every receipt.
 - The Switch stack is pinned to `0.31.0`; the protocol is young and the client is intentionally small.
